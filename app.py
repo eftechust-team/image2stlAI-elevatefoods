@@ -350,7 +350,7 @@ def generate_hollow_shell_stl(mask_array, width, height, z_offset, thickness):
         # Build geometry for each outer contour + holes
         for outer_idx, hole_indices in outer_with_holes:
             outer_raw = filtered_sorted[outer_idx]
-            outer_simplified = simplify_contour(outer_raw, epsilon=0.3)
+            outer_simplified = simplify_contour(outer_raw, epsilon=0.8)
             if len(outer_simplified) < 3:
                 continue
             
@@ -359,7 +359,7 @@ def generate_hollow_shell_stl(mask_array, width, height, z_offset, thickness):
             # Remove duplicate vertices
             unique_verts = [outer_verts[0]]
             for i in range(1, len(outer_verts)):
-                if np.linalg.norm(outer_verts[i] - unique_verts[-1]) > 0.05:
+                if np.linalg.norm(outer_verts[i] - unique_verts[-1]) > 0.3:
                     unique_verts.append(outer_verts[i])
             outer_verts = np.array(unique_verts)
             
@@ -370,13 +370,13 @@ def generate_hollow_shell_stl(mask_array, width, height, z_offset, thickness):
             hole_verts_list = []
             for hi in hole_indices:
                 h_raw = filtered_sorted[hi]
-                h_simplified = simplify_contour(h_raw, epsilon=0.3)
+                h_simplified = simplify_contour(h_raw, epsilon=0.8)
                 if len(h_simplified) < 3:
                     continue
                 h_verts = ensure_ccw(h_simplified)[::-1]  # Make CW for holes
                 u = [h_verts[0]]
                 for i in range(1, len(h_verts)):
-                    if np.linalg.norm(h_verts[i] - u[-1]) > 0.05:
+                    if np.linalg.norm(h_verts[i] - u[-1]) > 0.3:
                         u.append(h_verts[i])
                 h_verts_dedup = np.array(u)
                 
@@ -559,7 +559,7 @@ def generate_stl_from_contours(mask_array, width, height, z_offset, thickness, a
 
         for outer_idx, hole_indices in outer_with_holes:
             outer_raw = filtered_sorted[outer_idx]
-            outer_simplified = simplify_contour(outer_raw, epsilon=0.3)
+            outer_simplified = simplify_contour(outer_raw, epsilon=0.8)
             if len(outer_simplified) < 3:
                 continue
             outer_verts = ensure_ccw(outer_simplified)
@@ -567,7 +567,7 @@ def generate_stl_from_contours(mask_array, width, height, z_offset, thickness, a
             # Remove duplicate vertices
             unique_verts = [outer_verts[0]]
             for i in range(1, len(outer_verts)):
-                if np.linalg.norm(outer_verts[i] - unique_verts[-1]) > 0.1:
+                if np.linalg.norm(outer_verts[i] - unique_verts[-1]) > 0.3:
                     unique_verts.append(outer_verts[i])
             outer_verts = np.array(unique_verts)
             if len(outer_verts) < 3:
@@ -578,14 +578,14 @@ def generate_stl_from_contours(mask_array, width, height, z_offset, thickness, a
             hole_verts_list = []
             for hi in hole_indices:
                 h_raw = filtered_sorted[hi]
-                h_simplified = simplify_contour(h_raw, epsilon=0.3)
+                h_simplified = simplify_contour(h_raw, epsilon=0.8)
                 if len(h_simplified) < 3:
                     continue
                 # earcut expects holes as CW (opposite winding to outer)
                 h_verts = ensure_ccw(h_simplified)[::-1]  # make CW
                 u = [h_verts[0]]
                 for i in range(1, len(h_verts)):
-                    if np.linalg.norm(h_verts[i] - u[-1]) > 0.1:
+                    if np.linalg.norm(h_verts[i] - u[-1]) > 0.3:
                         u.append(h_verts[i])
                 if len(u) >= 3:
                     hole_verts_list.append(np.array(u))
