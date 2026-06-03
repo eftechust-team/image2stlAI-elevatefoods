@@ -350,7 +350,7 @@ def generate_hollow_shell_stl(mask_array, width, height, z_offset, thickness):
         # Build geometry for each outer contour + holes
         for outer_idx, hole_indices in outer_with_holes:
             outer_raw = filtered_sorted[outer_idx]
-            outer_simplified = simplify_contour(outer_raw, epsilon=0.8)
+            outer_simplified = simplify_contour(outer_raw, epsilon=0.3)
             if len(outer_simplified) < 3:
                 continue
             
@@ -359,12 +359,9 @@ def generate_hollow_shell_stl(mask_array, width, height, z_offset, thickness):
             # Remove duplicate vertices
             unique_verts = [outer_verts[0]]
             for i in range(1, len(outer_verts)):
-                if np.linalg.norm(outer_verts[i] - unique_verts[-1]) > 0.05:  # Tighter threshold for better mesh
+                if np.linalg.norm(outer_verts[i] - unique_verts[-1]) > 0.05:
                     unique_verts.append(outer_verts[i])
             outer_verts = np.array(unique_verts)
-            
-            # Remove nearly-colinear points to avoid degenerate triangles
-            outer_verts = remove_colinear_points(outer_verts, angle_threshold=0.01)
             
             if len(outer_verts) < 3:
                 continue
@@ -373,18 +370,15 @@ def generate_hollow_shell_stl(mask_array, width, height, z_offset, thickness):
             hole_verts_list = []
             for hi in hole_indices:
                 h_raw = filtered_sorted[hi]
-                h_simplified = simplify_contour(h_raw, epsilon=0.8)
+                h_simplified = simplify_contour(h_raw, epsilon=0.3)
                 if len(h_simplified) < 3:
                     continue
                 h_verts = ensure_ccw(h_simplified)[::-1]  # Make CW for holes
                 u = [h_verts[0]]
                 for i in range(1, len(h_verts)):
-                    if np.linalg.norm(h_verts[i] - u[-1]) > 0.05:  # Tighter threshold
+                    if np.linalg.norm(h_verts[i] - u[-1]) > 0.05:
                         u.append(h_verts[i])
                 h_verts_dedup = np.array(u)
-                
-                # Remove nearly-colinear points
-                h_verts_dedup = remove_colinear_points(h_verts_dedup, angle_threshold=0.01)
                 
                 if len(h_verts_dedup) >= 3:
                     hole_verts_list.append(h_verts_dedup)
@@ -565,7 +559,7 @@ def generate_stl_from_contours(mask_array, width, height, z_offset, thickness, a
 
         for outer_idx, hole_indices in outer_with_holes:
             outer_raw = filtered_sorted[outer_idx]
-            outer_simplified = simplify_contour(outer_raw, epsilon=0.8)
+            outer_simplified = simplify_contour(outer_raw, epsilon=0.3)
             if len(outer_simplified) < 3:
                 continue
             outer_verts = ensure_ccw(outer_simplified)
@@ -584,7 +578,7 @@ def generate_stl_from_contours(mask_array, width, height, z_offset, thickness, a
             hole_verts_list = []
             for hi in hole_indices:
                 h_raw = filtered_sorted[hi]
-                h_simplified = simplify_contour(h_raw, epsilon=0.8)
+                h_simplified = simplify_contour(h_raw, epsilon=0.3)
                 if len(h_simplified) < 3:
                     continue
                 # earcut expects holes as CW (opposite winding to outer)
@@ -895,24 +889,23 @@ def generate_stl_from_points_fallback(mask_array, width, height, z_offset, thick
     return ''.join(stl_lines)
 
 def simplify_contour(contour, epsilon=0.5):
-    """Ramer-Douglas-Peucker contour simplification."""
-    if len(contour) < 3:
+    """Fast distance-based contour simplification (non-recursive).
+    Iteratively removes points that are close to the line between neighbors.
+    """
+    if len(contour) < 4:
         return contour
     
-    dmax = 0
-    index = 0
+    result = [contour[0]]
+    threshold_sq = epsilon * epsilon
+    
+    # Simple iterative approach: keep points that are far from line to next kept point
     for i in range(1, len(contour) - 1):
-        d = point_to_line_distance(contour[i], contour[0], contour[-1])
-        if d > dmax:
-            dmax = d
-            index = i
+        d_sq = point_to_line_distance(contour[i], result[-1], contour[-1]) ** 2
+        if d_sq > threshold_sq:
+            result.append(contour[i])
     
-    if dmax > epsilon:
-        left = simplify_contour(contour[:index+1], epsilon)
-        right = simplify_contour(contour[index:], epsilon)
-        return np.vstack([left[:-1], right])
-    
-    return np.array([contour[0], contour[-1]])
+    result.append(contour[-1])
+    return np.array(result) if len(result) >= 3 else contour
 
 
 def remove_colinear_points(points, angle_threshold=0.01):
@@ -975,27 +968,6 @@ def point_to_line_distance(point, line_start, line_end):
     closest_y = y1 + t * dy
     
     return np.sqrt((px - closest_x)**2 + (py - closest_y)**2)
-
-
-def simplify_contour(contour, epsilon=0.5):
-    """Ramer-Douglas-Peucker contour simplification."""
-    if len(contour) < 3:
-        return contour
-    
-    dmax = 0
-    index = 0
-    for i in range(1, len(contour) - 1):
-        d = point_to_line_distance(contour[i], contour[0], contour[-1])
-        if d > dmax:
-            dmax = d
-            index = i
-    
-    if dmax > epsilon:
-        left = simplify_contour(contour[:index+1], epsilon)
-        right = simplify_contour(contour[index:], epsilon)
-        return np.vstack([left[:-1], right])
-    
-    return np.array([contour[0], contour[-1]])
 
 
 def smooth_contour_spline(contour, smoothing=0.005):
