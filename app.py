@@ -359,9 +359,12 @@ def generate_hollow_shell_stl(mask_array, width, height, z_offset, thickness):
             # Remove duplicate vertices
             unique_verts = [outer_verts[0]]
             for i in range(1, len(outer_verts)):
-                if np.linalg.norm(outer_verts[i] - unique_verts[-1]) > 0.1:
+                if np.linalg.norm(outer_verts[i] - unique_verts[-1]) > 0.05:  # Tighter threshold for better mesh
                     unique_verts.append(outer_verts[i])
             outer_verts = np.array(unique_verts)
+            
+            # Remove nearly-colinear points to avoid degenerate triangles
+            outer_verts = remove_colinear_points(outer_verts, angle_threshold=0.01)
             
             if len(outer_verts) < 3:
                 continue
@@ -376,10 +379,15 @@ def generate_hollow_shell_stl(mask_array, width, height, z_offset, thickness):
                 h_verts = ensure_ccw(h_simplified)[::-1]  # Make CW for holes
                 u = [h_verts[0]]
                 for i in range(1, len(h_verts)):
-                    if np.linalg.norm(h_verts[i] - u[-1]) > 0.1:
+                    if np.linalg.norm(h_verts[i] - u[-1]) > 0.05:  # Tighter threshold
                         u.append(h_verts[i])
-                if len(u) >= 3:
-                    hole_verts_list.append(np.array(u))
+                h_verts_dedup = np.array(u)
+                
+                # Remove nearly-colinear points
+                h_verts_dedup = remove_colinear_points(h_verts_dedup, angle_threshold=0.01)
+                
+                if len(h_verts_dedup) >= 3:
+                    hole_verts_list.append(h_verts_dedup)
             
             # Triangulate outer contour
             triangles, all_verts = triangulate_with_holes(outer_verts, hole_verts_list)
@@ -906,6 +914,50 @@ def simplify_contour(contour, epsilon=0.5):
     
     return np.array([contour[0], contour[-1]])
 
+
+def remove_colinear_points(points, angle_threshold=0.01):
+    """Remove nearly-colinear points from a contour to reduce degenerate triangles.
+    Points are removed if the angle at that vertex is very small (nearly straight).
+    """
+    if len(points) < 4:
+        return points
+    
+    points = np.array(points)
+    filtered = [points[0]]
+    n = len(points)
+    
+    for i in range(1, n - 1):
+        p0 = points[i - 1]
+        p1 = points[i]
+        p2 = points[(i + 1) % n]
+        
+        # Vectors from p1 to neighbors
+        v1 = p0 - p1
+        v2 = p2 - p1
+        
+        len1 = np.linalg.norm(v1)
+        len2 = np.linalg.norm(v2)
+        
+        if len1 < 1e-6 or len2 < 1e-6:
+            continue  # Skip if vectors are too small
+        
+        # Normalized dot product (cosine of angle)
+        cos_angle = np.dot(v1, v2) / (len1 * len2)
+        cos_angle = np.clip(cos_angle, -1.0, 1.0)
+        
+        # If angle is close to 180 degrees (nearly colinear), skip this point
+        if abs(cos_angle + 1.0) < angle_threshold:  # Close to 180 degrees
+            continue
+        
+        filtered.append(p1)
+    
+    # Add last point
+    if len(points) > 0:
+        filtered.append(points[-1])
+    
+    return np.array(filtered) if len(filtered) > 2 else points
+
+
 def point_to_line_distance(point, line_start, line_end):
     """Distance from point to line segment."""
     px, py = point
@@ -923,6 +975,28 @@ def point_to_line_distance(point, line_start, line_end):
     closest_y = y1 + t * dy
     
     return np.sqrt((px - closest_x)**2 + (py - closest_y)**2)
+
+
+def simplify_contour(contour, epsilon=0.5):
+    """Ramer-Douglas-Peucker contour simplification."""
+    if len(contour) < 3:
+        return contour
+    
+    dmax = 0
+    index = 0
+    for i in range(1, len(contour) - 1):
+        d = point_to_line_distance(contour[i], contour[0], contour[-1])
+        if d > dmax:
+            dmax = d
+            index = i
+    
+    if dmax > epsilon:
+        left = simplify_contour(contour[:index+1], epsilon)
+        right = simplify_contour(contour[index:], epsilon)
+        return np.vstack([left[:-1], right])
+    
+    return np.array([contour[0], contour[-1]])
+
 
 def smooth_contour_spline(contour, smoothing=0.005):
     """Smooth contour using B-spline interpolation with light smoothing to preserve shape."""
@@ -1195,16 +1269,17 @@ def create_triangle(v1, v2, v3):
     except:
         return ""
     
-    # Convert to float tuples
+    # Convert to float tuples with rounding for floating point precision issues
     try:
-        v1 = tuple(float(x) for x in v1)
-        v2 = tuple(float(x) for x in v2)
-        v3 = tuple(float(x) for x in v3)
+        # Round to 6 decimals to avoid floating point artifacts
+        v1 = tuple(round(float(x), 6) for x in v1)
+        v2 = tuple(round(float(x), 6) for x in v2)
+        v3 = tuple(round(float(x), 6) for x in v3)
     except:
         return ""
     
     # Check for duplicate vertices (degenerate triangle)
-    eps = 1e-6
+    eps = 1e-7
     if (abs(v1[0] - v2[0]) < eps and abs(v1[1] - v2[1]) < eps and abs(v1[2] - v2[2]) < eps):
         return ""
     if (abs(v2[0] - v3[0]) < eps and abs(v2[1] - v3[1]) < eps and abs(v2[2] - v3[2]) < eps):
@@ -1226,8 +1301,9 @@ def create_triangle(v1, v2, v3):
     
     length = (nx * nx + ny * ny + nz * nz) ** 0.5
     
-    # Skip degenerate triangles (zero area)
-    if length < 1e-9:
+    # Skip degenerate triangles (zero or very small area - indicates colinearity)
+    min_area_sq = 1e-12  # Minimum area squared threshold
+    if length * length < min_area_sq:
         return ""
     
     # Normalize
