@@ -83,8 +83,8 @@ def fast_generate_stl():
         image_array = np.array(image)
         mask_array = image_array < threshold
         
-        # Generate STL as a proper closed hollow shell
-        stl_content = generate_hollow_shell_stl(
+        # Generate STL using grid-based algorithm (cleaner topology, faster repair)
+        stl_content = generate_stl_from_grid(
             mask_array,
             width,
             height,
@@ -188,21 +188,18 @@ def generate_stl():
             else:
                 mask = smooth_binary_mask(image, threshold=edge_threshold, blur_radius=0, close_size=1, open_size=1)
             
-            # Convert PIL image to numpy array for contour extraction
+            # Convert PIL image to numpy array
             mask_array = np.array(mask) > 128
             
-            # Generate STL for this layer using contour-based approach
+            # Generate STL for this layer using grid-based approach (cleaner topology, faster repair)
             z_offset = z_offsets[layer_idx]
             thickness = height_values[layer_idx]
-            stl_content = generate_stl_from_contours(
+            stl_content = generate_stl_from_grid(
                 mask_array,
                 width,
                 height,
                 z_offset,
-                thickness,
-                aa_enabled=aa_enabled,
-                aa_upsample=aa_upsample,
-                aa_sigma=aa_sigma
+                thickness
             )
             
             stl_files.append({
@@ -910,6 +907,106 @@ def simplify_contour(contour, epsilon=0.5):
     
     result.append(contour[-1])
     return np.array(result) if len(result) >= 3 else contour
+
+
+def generate_stl_from_grid(mask_array, width, height, z_offset, thickness):
+    """Generate STL using grid-based approach for faster repair.
+    Creates regular quad grid mesh from binary mask - much simpler topology
+    that PrusaSlicer can repair much faster.
+    
+    This approach:
+    - Converts black pixels to a regular grid
+    - Creates faces directly from grid cells
+    - Has predictable, regular topology (no contour artifacts)
+    """
+    if not np.any(mask_array):
+        return "solid layer\nendsolid layer\n"
+    
+    stl_lines = ["solid layer\n"]
+    z_top = z_offset + thickness
+    
+    # Scale: fit model to ~10mm based on image dimensions
+    scale = 10.0 / max(width, height)
+    
+    # Down-sample mask to reduce triangle count for faster repair
+    # Keep at least 50x50 grid for detail
+    target_size = 100
+    downsample = max(1, max(width, height) // target_size)
+    
+    if downsample > 1:
+        # Downsample by taking blocks
+        ds_height = (height + downsample - 1) // downsample
+        ds_width = (width + downsample - 1) // downsample
+        ds_mask = np.zeros((ds_height, ds_width), dtype=bool)
+        
+        for i in range(ds_height):
+            for j in range(ds_width):
+                # Check if any pixel in the block is black
+                y_start = min(i * downsample, height - 1)
+                y_end = min((i + 1) * downsample, height)
+                x_start = min(j * downsample, width - 1)
+                x_end = min((j + 1) * downsample, width)
+                ds_mask[i, j] = np.any(mask_array[y_start:y_end, x_start:x_end])
+        
+        working_mask = ds_mask
+        working_height = ds_height
+        working_width = ds_width
+        pixel_scale = downsample * scale
+    else:
+        working_mask = mask_array
+        working_height = height
+        working_width = width
+        pixel_scale = scale
+    
+    # Create bottom and top faces from grid
+    for y in range(working_height):
+        for x in range(working_width):
+            if not working_mask[y, x]:
+                continue
+            
+            # Center of current pixel
+            cx = (x + 0.5) * pixel_scale
+            cy = (y + 0.5) * pixel_scale
+            
+            # 4 corners of pixel
+            corners = [
+                ([x * pixel_scale, y * pixel_scale, z_offset], [x * pixel_scale, y * pixel_scale, z_top]),  # TL
+                ([(x + 1) * pixel_scale, y * pixel_scale, z_offset], [(x + 1) * pixel_scale, y * pixel_scale, z_top]),  # TR
+                ([(x + 1) * pixel_scale, (y + 1) * pixel_scale, z_offset], [(x + 1) * pixel_scale, (y + 1) * pixel_scale, z_top]),  # BR
+                ([x * pixel_scale, (y + 1) * pixel_scale, z_offset], [x * pixel_scale, (y + 1) * pixel_scale, z_top]),  # BL
+            ]
+            
+            # Bottom face (CCW from above)
+            stl_lines.append(create_triangle(corners[0][0], corners[1][0], corners[3][0]))
+            stl_lines.append(create_triangle(corners[1][0], corners[2][0], corners[3][0]))
+            
+            # Top face (CCW from below = CW from above)
+            stl_lines.append(create_triangle(corners[3][1], corners[1][1], corners[0][1]))
+            stl_lines.append(create_triangle(corners[3][1], corners[2][1], corners[1][1]))
+            
+            # Side faces only on edges
+            # Check neighbors
+            if x == 0 or not working_mask[y, x - 1]:  # Left edge
+                stl_lines.append(create_triangle(corners[0][0], corners[0][1], corners[3][0]))
+                stl_lines.append(create_triangle(corners[3][0], corners[0][1], corners[3][1]))
+            
+            if x == working_width - 1 or not working_mask[y, x + 1]:  # Right edge
+                stl_lines.append(create_triangle(corners[1][0], corners[2][0], corners[1][1]))
+                stl_lines.append(create_triangle(corners[2][0], corners[2][1], corners[1][1]))
+            
+            if y == 0 or not working_mask[y - 1, x]:  # Top edge
+                stl_lines.append(create_triangle(corners[0][0], corners[1][0], corners[0][1]))
+                stl_lines.append(create_triangle(corners[1][0], corners[1][1], corners[0][1]))
+            
+            if y == working_height - 1 or not working_mask[y + 1, x]:  # Bottom edge
+                stl_lines.append(create_triangle(corners[3][0], corners[3][1], corners[2][0]))
+                stl_lines.append(create_triangle(corners[2][0], corners[3][1], corners[2][1]))
+    
+    stl_lines.append("endsolid layer\n")
+    result = ''.join(stl_lines)
+    # Filter out empty/invalid triangles
+    result = '\n'.join([line for line in result.split('\n') if line.strip()])
+    return result + '\n'
 
 
 def remove_colinear_points(points, angle_threshold=0.01):
