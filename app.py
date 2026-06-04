@@ -78,10 +78,10 @@ def fast_generate_stl():
         image = image.convert('L')
         width, height = image.size
         
-        # Extract ONLY black pixels (dark areas)
-        threshold = 128
+        # Extract selected pixels (black/dark areas drawn by user)
+        # Darker pixels (< 128) = user selection, lighter pixels (> 128) = background
         image_array = np.array(image)
-        mask_array = image_array < threshold
+        mask_array = image_array < 128  # Select BLACK/dark pixels (user drawn areas)
         
         # Generate STL using grid-based algorithm (cleaner topology, faster repair)
         stl_content = generate_stl_from_grid(
@@ -916,6 +916,42 @@ def generate_stl_from_grid(mask_array, width, height, z_offset, thickness):
     """
     if not np.any(mask_array):
         return "solid layer\nendsolid layer\n"
+    
+    # Check for entire canvas selected (all True) - handle as special case
+    if np.all(mask_array):
+        # Entire canvas is selected - create a simple rectangular solid
+        scale = 10.0 / max(width, height)
+        z_top = z_offset + thickness
+        stl_lines = ["solid layer\n"]
+        
+        # Create rectangle corners in mm
+        x_max = width * scale
+        y_max = height * scale
+        
+        # Bottom face
+        stl_lines.append(create_triangle([0, 0, z_offset], [x_max, 0, z_offset], [0, y_max, z_offset]))
+        stl_lines.append(create_triangle([x_max, 0, z_offset], [x_max, y_max, z_offset], [0, y_max, z_offset]))
+        
+        # Top face
+        stl_lines.append(create_triangle([0, y_max, z_top], [x_max, y_max, z_top], [0, 0, z_top]))
+        stl_lines.append(create_triangle([x_max, y_max, z_top], [x_max, 0, z_top], [0, 0, z_top]))
+        
+        # Side walls
+        # Front (y=0)
+        stl_lines.append(create_triangle([0, 0, z_offset], [0, 0, z_top], [x_max, 0, z_offset]))
+        stl_lines.append(create_triangle([x_max, 0, z_offset], [0, 0, z_top], [x_max, 0, z_top]))
+        # Back (y=y_max)
+        stl_lines.append(create_triangle([0, y_max, z_offset], [x_max, y_max, z_offset], [0, y_max, z_top]))
+        stl_lines.append(create_triangle([x_max, y_max, z_offset], [x_max, y_max, z_top], [0, y_max, z_top]))
+        # Left (x=0)
+        stl_lines.append(create_triangle([0, 0, z_offset], [0, y_max, z_offset], [0, 0, z_top]))
+        stl_lines.append(create_triangle([0, y_max, z_offset], [0, y_max, z_top], [0, 0, z_top]))
+        # Right (x=x_max)
+        stl_lines.append(create_triangle([x_max, 0, z_offset], [x_max, 0, z_top], [x_max, y_max, z_offset]))
+        stl_lines.append(create_triangle([x_max, y_max, z_offset], [x_max, 0, z_top], [x_max, y_max, z_top]))
+        
+        stl_lines.append("endsolid layer\n")
+        return ''.join(line for line in stl_lines if line)
     
     try:
         # Find contours (boundaries of black regions)
