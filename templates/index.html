@@ -18,7 +18,6 @@
             padding: 0;
             margin: 0;
             padding-top: 80px;
-            overscroll-behavior: none;
         }
 
         .top-header {
@@ -198,15 +197,11 @@
             gap: 16px;
             align-items: flex-start;
             flex-wrap: wrap;
-            touch-action: none;
-            overscroll-behavior: none;
         }
 
         .selection-canvas-wrap {
             flex: 0 0 420px;
             min-width: 420px;
-            touch-action: none;
-            overscroll-behavior: none;
         }
 
         .selection-tools {
@@ -235,8 +230,8 @@
             background: white;
             border-radius: 6px;
             pointer-events: auto;
-            touch-action: none;
-            overscroll-behavior: none;
+            touch-action: manipulation;
+            overscroll-behavior: auto;
         }
         
         .controls {
@@ -618,29 +613,6 @@
             };
         }
 
-        let pageScrollLockCount = 0;
-        let savedHtmlOverflow = '';
-        let savedBodyOverflow = '';
-
-        function lockPageScroll() {
-            if (pageScrollLockCount === 0) {
-                savedHtmlOverflow = document.documentElement.style.overflow;
-                savedBodyOverflow = document.body.style.overflow;
-                document.documentElement.style.overflow = 'hidden';
-                document.body.style.overflow = 'hidden';
-            }
-            pageScrollLockCount += 1;
-        }
-
-        function unlockPageScroll() {
-            if (pageScrollLockCount === 0) return;
-            pageScrollLockCount -= 1;
-            if (pageScrollLockCount === 0) {
-                document.documentElement.style.overflow = savedHtmlOverflow;
-                document.body.style.overflow = savedBodyOverflow;
-            }
-        }
-
         // Generate Images
         document.getElementById('generate').addEventListener('click', async () => {
             const generateBtn = document.getElementById('generate');
@@ -905,7 +877,7 @@
         });
 
         canvas.addEventListener('touchstart', (e) => {
-            lockPageScroll();
+            if (e.touches.length > 1) return;
             e.preventDefault();
             const touch = e.changedTouches[0];
             if (!touch) return;
@@ -940,16 +912,14 @@
         }, { passive: false });
 
         canvas.addEventListener('touchend', (e) => {
-            e.preventDefault();
+            if (drawing) e.preventDefault();
             drawing = false;
             lastDrawPoint = null;
-            unlockPageScroll();
         }, { passive: false });
 
         canvas.addEventListener('touchcancel', () => {
             drawing = false;
             lastDrawPoint = null;
-            unlockPageScroll();
         });
 
         // Paint bucket flood fill
@@ -1613,7 +1583,7 @@
 
             const handleTouchStart = (e) => {
                 if (!e.touches || !e.touches.length) return;
-                lockPageScroll();
+                if (e.touches.length > 1) return;
                 e.preventDefault();
                 const touch = e.touches[0];
                 const point = getCanvasPointFromClient(touch.clientX, touch.clientY, canvas);
@@ -1627,6 +1597,7 @@
 
             const handleTouchMove = (e) => {
                 if (!e.touches || !e.touches.length) return;
+                if (e.touches.length > 1) return;
                 e.preventDefault();
                 const touch = e.touches[0];
                 const point = getCanvasPointFromClient(touch.clientX, touch.clientY, canvas);
@@ -1648,16 +1619,15 @@
 
             const handleTouchEnd = (e) => {
                 if (selectionMode === 'lasso') {
-                    e.preventDefault();
+                    if (isDrawingLasso) e.preventDefault();
                     finishLasso();
                     touchStartPoint = null;
                     touchMoved = false;
-                    unlockPageScroll();
                     return;
                 }
 
                 if (selectionMode === 'wand' && touchStartPoint) {
-                    e.preventDefault();
+                    if (!touchMoved) e.preventDefault();
                     if (!touchMoved) {
                         saveSelectionState();
                         applyWandSelection(touchStartPoint.x, touchStartPoint.y);
@@ -1665,8 +1635,6 @@
                     touchStartPoint = null;
                     touchMoved = false;
                 }
-
-                unlockPageScroll();
             };
 
             // Helper function to apply selection with add/subtract modes
