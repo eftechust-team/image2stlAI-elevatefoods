@@ -5,6 +5,7 @@ Generate multi-layer STL files from AI-generated black-and-white images with las
 ## Features
 
 - AI image generation via Doubao API.
+- Per-browser image quota capped at 4 generated images.
 - Canvas editing (pen, bucket, undo/redo).
 - Selection tools: Magic Wand and Lasso with add/subtract.
 - Expand Selection (px) to close gaps without cumulative growth.
@@ -34,7 +35,14 @@ This repo includes `render.yaml` for one-click deploy.
 - Start: `gunicorn app:app`
 - Environment variables:
   - `DOUBAO_API_KEY`: your Doubao API key (set in Render Dashboard → Environment)
+	- `FLASK_SECRET_KEY`: stable secret used for per-session image quotas
   - `PYTHON_VERSION`: 3.11 (provided in render.yaml)
+
+Optional tuning:
+
+- `MAX_IMAGES_PER_SESSION`: default `4`
+- `MAX_CONCURRENT_REQUESTS`: default `2`
+- `DOUBAO_REQUEST_TIMEOUT`: default `90`
 
 Steps:
 - Create a new Web Service from this repo.

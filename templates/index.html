@@ -18,6 +18,7 @@
             padding: 0;
             margin: 0;
             padding-top: 80px;
+            overscroll-behavior: none;
         }
 
         .top-header {
@@ -197,11 +198,15 @@
             gap: 16px;
             align-items: flex-start;
             flex-wrap: wrap;
+            touch-action: none;
+            overscroll-behavior: none;
         }
 
         .selection-canvas-wrap {
             flex: 0 0 420px;
             min-width: 420px;
+            touch-action: none;
+            overscroll-behavior: none;
         }
 
         .selection-tools {
@@ -230,6 +235,8 @@
             background: white;
             border-radius: 6px;
             pointer-events: auto;
+            touch-action: none;
+            overscroll-behavior: none;
         }
         
         .controls {
@@ -586,13 +593,65 @@
         let currentSelection = null;
         let selectionDilationPx = 3;
         let selectionZoom = 1;
+        let initialPrompt = '';
+
+        function sanitizeFilename(value) {
+            const fallback = 'model';
+            const cleaned = String(value || '')
+                .trim()
+                .replace(/[\\/:*?"<>|]+/g, '_')
+                .replace(/\s+/g, '_')
+                .replace(/_+/g, '_')
+                .replace(/^_+|_+$/g, '');
+            return (cleaned || fallback).slice(0, 80);
+        }
+
+        function getModelFilenameStem() {
+            return sanitizeFilename(initialPrompt || document.getElementById('prompt').value || 'model');
+        }
+
+        function getCanvasPointFromClient(clientX, clientY, targetCanvas) {
+            const rect = targetCanvas.getBoundingClientRect();
+            return {
+                x: Math.floor((clientX - rect.left) * (targetCanvas.width / rect.width)),
+                y: Math.floor((clientY - rect.top) * (targetCanvas.height / rect.height))
+            };
+        }
+
+        let pageScrollLockCount = 0;
+        let savedHtmlOverflow = '';
+        let savedBodyOverflow = '';
+
+        function lockPageScroll() {
+            if (pageScrollLockCount === 0) {
+                savedHtmlOverflow = document.documentElement.style.overflow;
+                savedBodyOverflow = document.body.style.overflow;
+                document.documentElement.style.overflow = 'hidden';
+                document.body.style.overflow = 'hidden';
+            }
+            pageScrollLockCount += 1;
+        }
+
+        function unlockPageScroll() {
+            if (pageScrollLockCount === 0) return;
+            pageScrollLockCount -= 1;
+            if (pageScrollLockCount === 0) {
+                document.documentElement.style.overflow = savedHtmlOverflow;
+                document.body.style.overflow = savedBodyOverflow;
+            }
+        }
 
         // Generate Images
         document.getElementById('generate').addEventListener('click', async () => {
+            const generateBtn = document.getElementById('generate');
             const prompt = document.getElementById('prompt').value;
             if (!prompt.trim()) {
                 alert('Please enter a prompt');
                 return;
+            }
+
+            if (!initialPrompt) {
+                initialPrompt = prompt.trim();
             }
             
             const imagesDiv = document.getElementById('images');
@@ -600,10 +659,13 @@
             
             imagesDiv.innerHTML = '';
             status.textContent = 'Starting generation...';
+            generateBtn.disabled = true;
             
             let firstImageShown = false;
-            for (let i = 0; i < 4; i++) {
-                status.textContent = `Generating image ${i+1}/4...`;
+            let remainingImages = 4;
+
+            for (let i = 0; i < 4 && remainingImages > 0; i++) {
+                status.textContent = `Generating image ${i + 1}/4...`;
                 try {
                     const response = await fetch('/generate_images', {
                         method: 'POST',
@@ -611,28 +673,55 @@
                         body: JSON.stringify({ prompt })
                     });
                     const data = await response.json();
+
+                    if (response.status === 429) {
+                        status.textContent = data.error || 'Image quota reached for this session.';
+                        generateBtn.disabled = true;
+                        break;
+                    }
+
+                    if (response.status === 503) {
+                        status.textContent = data.error || 'Server is busy right now.';
+                        break;
+                    }
                     
                     if (data.image) {
                         const imgElement = document.createElement('img');
                         imgElement.src = 'data:image/png;base64,' + data.image;
                         imgElement.onclick = () => selectImage(data.image, imgElement);
                         imagesDiv.appendChild(imgElement);
+                        remainingImages = typeof data.remaining_images === 'number' ? data.remaining_images : Math.max(0, remainingImages - 1);
                         if (!firstImageShown) {
                             document.getElementById('selectionSection').style.display = 'block';
                             status.textContent = 'First image ready—click one to edit while others generate.';
                             firstImageShown = true;
                         }
+                        if (remainingImages <= 0) {
+                            status.textContent = 'Image limit reached for this session. You can select from the images already generated.';
+                            generateBtn.disabled = true;
+                            break;
+                        }
                     } else {
                         status.textContent = `Failed to generate image ${i+1}`;
+                        break;
                     }
                 } catch (error) {
                     console.error('Error:', error);
                     status.textContent = 'Error generating images';
+                    break;
                 }
             }
-            
-            status.textContent = 'All images generated! Select one to continue.';
-            document.getElementById('selectionSection').style.display = 'block';
+
+            if (imagesDiv.children.length > 0) {
+                document.getElementById('selectionSection').style.display = 'block';
+                if (remainingImages > 0) {
+                    status.textContent = 'All images generated! Select one to continue.';
+                }
+            }
+
+            if (remainingImages > 0) {
+                generateBtn.disabled = false;
+            }
         });
 
         // Select Image
@@ -683,7 +772,7 @@
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = 'model.stl';
+                    a.download = `${getModelFilenameStem()}.stl`;
                     a.click();
                     URL.revokeObjectURL(url);
                 }
@@ -813,6 +902,54 @@
                 ctx.stroke();
                 lastDrawPoint = { x, y };
             }
+        });
+
+        canvas.addEventListener('touchstart', (e) => {
+            lockPageScroll();
+            e.preventDefault();
+            const touch = e.changedTouches[0];
+            if (!touch) return;
+            const point = getCanvasPointFromClient(touch.clientX, touch.clientY, canvas);
+            if (bucketMode) {
+                drawing = false;
+                saveState();
+                floodFillAt(point.x, point.y);
+                updateHistoryButtons();
+                return;
+            }
+            drawing = true;
+            lastDrawPoint = point;
+            saveState();
+            ctx.beginPath();
+            ctx.moveTo(lastDrawPoint.x, lastDrawPoint.y);
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (!drawing || bucketMode) return;
+            e.preventDefault();
+            const touch = e.changedTouches[0];
+            if (!touch) return;
+            const point = getCanvasPointFromClient(touch.clientX, touch.clientY, canvas);
+            ctx.strokeStyle = penColor;
+            ctx.lineWidth = brushSize;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.lineTo(point.x, point.y);
+            ctx.stroke();
+            lastDrawPoint = point;
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            drawing = false;
+            lastDrawPoint = null;
+            unlockPageScroll();
+        }, { passive: false });
+
+        canvas.addEventListener('touchcancel', () => {
+            drawing = false;
+            lastDrawPoint = null;
+            unlockPageScroll();
         });
 
         // Paint bucket flood fill
@@ -1156,6 +1293,11 @@
             let selectionMask = new Uint8Array(canvas.width * canvas.height); // 1 = selected, 0 = not selected
             let undoStackSelection = [];
             let redoStackSelection = [];
+            let touchStartPoint = null;
+            let touchMoved = false;
+
+            canvas.style.touchAction = 'none';
+            canvas.style.overscrollBehavior = 'contain';
             
             // Smooth selection mask: apply median filter then close/open to remove jagged edges
             function smoothSelectionMask(mask, width, height, iterations = 1) {
@@ -1440,9 +1582,9 @@
             const handleMouseDown = (e) => {
                 if (selectionMode !== 'lasso') return;
                 if (e.button !== 0) return;
-                const rect = canvas.getBoundingClientRect();
-                const x = Math.floor((e.clientX - rect.left) * (canvas.width / rect.width));
-                const y = Math.floor((e.clientY - rect.top) * (canvas.height / rect.height));
+                const point = getCanvasPointFromClient(e.clientX, e.clientY, canvas);
+                const x = point.x;
+                const y = point.y;
                 lassoPath = [[x, y]];
                 isDrawingLasso = true;
             };
@@ -1450,9 +1592,9 @@
             const handleMouseMove = (e) => {
                 if (selectionMode !== 'lasso') return;
                 if (!isDrawingLasso || e.buttons !== 1) return;
-                const rect = canvas.getBoundingClientRect();
-                const x = Math.floor((e.clientX - rect.left) * (canvas.width / rect.width));
-                const y = Math.floor((e.clientY - rect.top) * (canvas.height / rect.height));
+                const point = getCanvasPointFromClient(e.clientX, e.clientY, canvas);
+                const x = point.x;
+                const y = point.y;
                 lassoPath.push([x, y]);
                 
                 // Show real-time preview with current selection mask (no cumulative dilation)
@@ -1467,6 +1609,64 @@
                     ctx.lineTo(lassoPath[i][0], lassoPath[i][1]);
                 }
                 ctx.stroke();
+            };
+
+            const handleTouchStart = (e) => {
+                if (!e.touches || !e.touches.length) return;
+                lockPageScroll();
+                e.preventDefault();
+                const touch = e.touches[0];
+                const point = getCanvasPointFromClient(touch.clientX, touch.clientY, canvas);
+                touchStartPoint = point;
+                touchMoved = false;
+                if (selectionMode === 'lasso') {
+                    lassoPath = [[point.x, point.y]];
+                    isDrawingLasso = true;
+                }
+            };
+
+            const handleTouchMove = (e) => {
+                if (!e.touches || !e.touches.length) return;
+                e.preventDefault();
+                const touch = e.touches[0];
+                const point = getCanvasPointFromClient(touch.clientX, touch.clientY, canvas);
+                if (touchStartPoint && (Math.abs(point.x - touchStartPoint.x) > 2 || Math.abs(point.y - touchStartPoint.y) > 2)) {
+                    touchMoved = true;
+                }
+                if (selectionMode !== 'lasso' || !isDrawingLasso) return;
+                lassoPath.push([point.x, point.y]);
+                redrawWithSelection();
+                ctx.strokeStyle = editMode === 'add' ? '#0064ff' : '#ff6400';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(lassoPath[0][0], lassoPath[0][1]);
+                for (let i = 1; i < lassoPath.length; i++) {
+                    ctx.lineTo(lassoPath[i][0], lassoPath[i][1]);
+                }
+                ctx.stroke();
+            };
+
+            const handleTouchEnd = (e) => {
+                if (selectionMode === 'lasso') {
+                    e.preventDefault();
+                    finishLasso();
+                    touchStartPoint = null;
+                    touchMoved = false;
+                    unlockPageScroll();
+                    return;
+                }
+
+                if (selectionMode === 'wand' && touchStartPoint) {
+                    e.preventDefault();
+                    if (!touchMoved) {
+                        saveSelectionState();
+                        applyWandSelection(touchStartPoint.x, touchStartPoint.y);
+                    }
+                    touchStartPoint = null;
+                    touchMoved = false;
+                }
+
+                unlockPageScroll();
             };
 
             // Helper function to apply selection with add/subtract modes
@@ -1584,6 +1784,10 @@
             canvas.onmousedown = handleMouseDown;
             canvas.onmousemove = handleMouseMove;
             canvas.onmouseup = finishLasso;
+            canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+            canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+            canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+            canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
 
             // Magic Wand
             canvas.onclick = (e) => {
@@ -1765,7 +1969,7 @@
                 // Download the ZIP file
                 const a = document.createElement('a');
                 a.href = 'data:application/zip;base64,' + data.zip_file;
-                a.download = 'stl_layers.zip';
+                a.download = `${getModelFilenameStem()}.zip`;
                 a.click();
                 
                 document.getElementById('status').textContent = `Generated ${data.num_layers} STL files in ZIP!`;

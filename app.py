@@ -1,17 +1,44 @@
 # -*- coding: utf-8 -*-
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session
 import requests
 import os
 from PIL import Image, ImageFilter
 import io
 import base64
 import zipfile
+import threading
 import numpy as np
 from scipy import interpolate, ndimage
 from skimage import measure, transform, filters
 import mapbox_earcut as earcut
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
+app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY') or os.getenv('SECRET_KEY') or 'AIGenSTL-local-dev-secret'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
+MAX_IMAGES_PER_SESSION = int(os.getenv('MAX_IMAGES_PER_SESSION', '4'))
+MAX_CONCURRENT_REQUESTS = max(1, int(os.getenv('MAX_CONCURRENT_REQUESTS', '2')))
+DOUBAO_REQUEST_TIMEOUT = float(os.getenv('DOUBAO_REQUEST_TIMEOUT', '90'))
+request_gate = threading.BoundedSemaphore(MAX_CONCURRENT_REQUESTS)
+http_session = requests.Session()
+http_retry = Retry(
+    total=2,
+    connect=2,
+    read=2,
+    backoff_factor=0.4,
+    status_forcelist=(429, 500, 502, 503, 504),
+    allowed_methods=frozenset(['POST'])
+)
+http_adapter = HTTPAdapter(
+    pool_connections=MAX_CONCURRENT_REQUESTS * 2,
+    pool_maxsize=MAX_CONCURRENT_REQUESTS * 2,
+    max_retries=http_retry
+)
+http_session.mount('https://', http_adapter)
+http_session.mount('http://', http_adapter)
 
 # You need to get the API Key from: https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey
 # The AK/SK provided are for account access, not direct API calls
@@ -19,57 +46,90 @@ app = Flask(__name__, static_folder='static', static_url_path='/static')
 DOUBAO_API_URL = "https://ark.cn-beijing.volces.com/api/v3/images/generations"
 API_KEY = os.getenv("DOUBAO_API_KEY", "")
 
+
+def get_image_generation_count():
+    try:
+        return int(session.get('image_generation_count', 0))
+    except Exception:
+        return 0
+
+
+def get_remaining_image_generations():
+    return max(0, MAX_IMAGES_PER_SESSION - get_image_generation_count())
+
+
+def increment_image_generation_count():
+    session['image_generation_count'] = get_image_generation_count() + 1
+    session.modified = True
+
 @app.route('/')
 def index():
     return render_template('index.html')
 
 @app.route('/generate_images', methods=['POST'])
 def generate_images():
-    data = request.json
-    user_prompt = data['prompt']
-    prompt = f"生成一个白色背景黑色填充的简笔画风格2D平面图像，做成{user_prompt}的形状。重要要求：1. 只生成纯2D平面图像，不要任何3D效果、阴影、渐变或光影。2. 使用非常粗的黑色线条（至少15-20像素宽），线条必须粗大，不能有细线。3. 不要使用白色线条来显示形状，只使用黑色。4. 避免双重轮廓或重复的边缘线条，只有一个清晰的外轮廓。5. 所有点的直径至少25-35像素，点必须非常非常大，不能有小点。6. 使用实心填充，不要只有轮廓。7. 如果为了避免细线或小点，可以重新设计或简化形状，优先保证线条粗和点大而不是完全匹配原始形状。为了3D打印和制造，粗线条和大点比精确的细节更重要。"
-    
-    # Ensure API key is set via environment variable
-    if not API_KEY:
-        return jsonify({'error': 'Missing API key. Set environment variable DOUBAO_API_KEY in Render.'})
+    data = request.get_json(silent=True) or {}
+    user_prompt = str(data.get('prompt', '')).strip()
+    if not user_prompt:
+        return jsonify({'error': 'Please enter a prompt.'}), 400
 
-    # Call Doubao API to generate image
-    response = requests.post(DOUBAO_API_URL, json={
-        'model': 'doubao-seedream-4-0-250828',
-        'prompt': prompt,
-        'size': '1024x1024',
-        'response_format': 'b64_json',
-        'watermark': False
-    }, headers={
-        'Authorization': f'Bearer {API_KEY}',
-        'Content-Type': 'application/json'
-    })
-    
-    print(f"Request sent - Status: {response.status_code}")
-    print(f"Full Response: {response.text}")
-    
-    if response.status_code == 200:
-        result = response.json()
-        if 'data' in result and len(result['data']) > 0:
-            image_data = result['data'][0]['b64_json']
-            return jsonify({'image': image_data})
-        else:
-            return jsonify({'error': f'No image data in response: {result}'})
-    else:
+    remaining_images = get_remaining_image_generations()
+    if remaining_images <= 0:
+        return jsonify({'error': f'Image limit reached. Each person can generate at most {MAX_IMAGES_PER_SESSION} images.', 'remaining_images': 0}), 429
+
+    slot_acquired = request_gate.acquire(timeout=2)
+    if not slot_acquired:
+        return jsonify({'error': 'Server is busy right now. Please try again in a moment.'}), 503
+
+    prompt = f"生成一个白色背景黑色填充的简笔画风格2D平面图像，做成{user_prompt}的形状。重要要求：1. 只生成纯2D平面图像，不要任何3D效果、阴影、渐变或光影。2. 使用非常粗的黑色线条（至少15-20像素宽），线条必须粗大，不能有细线。3. 不要使用白色线条来显示形状，只使用黑色。4. 避免双重轮廓或重复的边缘线条，只有一个清晰的外轮廓。5. 所有点的直径至少25-35像素，点必须非常非常大，不能有小点。6. 使用实心填充，不要只有轮廓。7. 如果为了避免细线或小点，可以重新设计或简化形状，优先保证线条粗和点大而不是完全匹配原始形状。为了3D打印和制造，粗线条和大点比精确的细节更重要。"
+
+    try:
+        # Ensure API key is set via environment variable
+        if not API_KEY:
+            return jsonify({'error': 'Missing API key. Set environment variable DOUBAO_API_KEY in Render.'}), 500
+
+        # Call Doubao API to generate image
+        response = http_session.post(DOUBAO_API_URL, json={
+            'model': 'doubao-seedream-4-0-250828',
+            'prompt': prompt,
+            'size': '1024x1024',
+            'response_format': 'b64_json',
+            'watermark': False
+        }, headers={
+            'Authorization': f'Bearer {API_KEY}',
+            'Content-Type': 'application/json'
+        }, timeout=DOUBAO_REQUEST_TIMEOUT)
+
+        if response.status_code == 200:
+            result = response.json()
+            if 'data' in result and len(result['data']) > 0:
+                image_data = result['data'][0]['b64_json']
+                increment_image_generation_count()
+                return jsonify({'image': image_data, 'remaining_images': get_remaining_image_generations(), 'generated_count': get_image_generation_count()})
+            return jsonify({'error': f'No image data in response: {result}'}), 502
+
         error_response = response.text
         print(f"ERROR - Status: {response.status_code}")
         print(f"ERROR - Details: {error_response}")
-        return jsonify({'error': f'API Error {response.status_code}: {error_response}'})
+        return jsonify({'error': f'API Error {response.status_code}: {error_response}'}), 502
+    except requests.RequestException as exc:
+        return jsonify({'error': f'Image generation request failed: {str(exc)}'}), 502
+    finally:
+        request_gate.release()
 
 @app.route('/fast_generate_stl', methods=['POST'])
 def fast_generate_stl():
     """Fast STL generation - creates a proper closed hollow shell from black pixels.
     Generates top, bottom, and side walls without any filling."""
-    data = request.json
-    image_b64 = data['image']
-    height_mm = float(data.get('height', 5.0))
-    
+    slot_acquired = request_gate.acquire(timeout=2)
+    if not slot_acquired:
+        return jsonify({'error': 'Server is busy right now. Please try again in a moment.'}), 503
+
     try:
+        data = request.get_json(silent=True) or {}
+        image_b64 = data['image']
+        height_mm = float(data.get('height', 5.0))
+
         # Decode base64 image
         image_data = base64.b64decode(image_b64)
         image = Image.open(io.BytesIO(image_data))
@@ -100,86 +160,92 @@ def fast_generate_stl():
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({'error': f'Fast generation error: {str(e)}'})
+        return jsonify({'error': f'Fast generation error: {str(e)}'}), 500
+    finally:
+        request_gate.release()
 
 @app.route('/generate_stl', methods=['POST'])
 def generate_stl():
-    data = request.json
-    layers = data['layers']  # list of base64 images, one per layer
-    num_layers = int(data['num_layers'])
-    
-    # Enforce maximum 4 layers
-    if num_layers > 4:
-        return jsonify({'error': 'Maximum 4 layers allowed. Please select 1, 2, 3, or 4 layers.'}), 400
-    if num_layers < 1:
-        return jsonify({'error': 'Minimum 1 layer required.'}), 400
-    
-    heights = data.get('heights') or []
-    positions = data.get('positions') or []
-    dilation = int(data.get('dilation') or 2)
-    aa_enabled = bool(data.get('anti_aliasing', True))
-    edge_threshold = int(data.get('edge_threshold') or 50)
-    if edge_threshold < 0:
-        edge_threshold = 0
-    if edge_threshold > 255:
-        edge_threshold = 255
-    aa_upsample = int(data.get('aa_upsample') or 2)  # Reduced to 2 for speed
-    if aa_upsample < 1:
-        aa_upsample = 1
-    if aa_upsample > 2:  # Max 2x upsampling
-        aa_upsample = 2
+    slot_acquired = request_gate.acquire(timeout=2)
+    if not slot_acquired:
+        return jsonify({'error': 'Server is busy right now. Please try again in a moment.'}), 503
+
     try:
-        aa_sigma = float(data.get('aa_sigma') or 0.5)  # Reduced for speed
-    except Exception:
-        aa_sigma = 0.5
-    if aa_sigma < 0:
-        aa_sigma = 0
-    if aa_sigma > 2.0:
-        aa_sigma = 2.0
-    # Normalize heights to floats with a sane default
-    height_values = []
-    for i in range(num_layers):
+        data = request.get_json(silent=True) or {}
+        layers = data['layers']  # list of base64 images, one per layer
+        num_layers = int(data['num_layers'])
+
+        # Enforce maximum 4 layers
+        if num_layers > 4:
+            return jsonify({'error': 'Maximum 4 layers allowed. Please select 1, 2, 3, or 4 layers.'}), 400
+        if num_layers < 1:
+            return jsonify({'error': 'Minimum 1 layer required.'}), 400
+
+        heights = data.get('heights') or []
+        positions = data.get('positions') or []
+        dilation = int(data.get('dilation') or 2)
+        aa_enabled = bool(data.get('anti_aliasing', True))
+        edge_threshold = int(data.get('edge_threshold') or 50)
+        if edge_threshold < 0:
+            edge_threshold = 0
+        if edge_threshold > 255:
+            edge_threshold = 255
+        aa_upsample = int(data.get('aa_upsample') or 2)  # Reduced to 2 for speed
+        if aa_upsample < 1:
+            aa_upsample = 1
+        if aa_upsample > 2:  # Max 2x upsampling
+            aa_upsample = 2
         try:
-            val = float(heights[i]) if i < len(heights) else 2.0
-            if val <= 0:
-                val = 2.0
+            aa_sigma = float(data.get('aa_sigma') or 0.5)  # Reduced for speed
         except Exception:
-            val = 2.0
-        height_values.append(val)
-    
-    stl_files = []
-    z_offsets = []
-    for idx in range(num_layers):
-        if idx == 0:
-            z_offsets.append(0.0)
-            continue
-        placement = positions[idx] if idx < len(positions) else "stack"
-        if placement == "same":
-            z_offsets.append(z_offsets[idx - 1])
-        else:
-            z_offsets.append(z_offsets[idx - 1] + height_values[idx - 1])
-    
-    # Get first layer dimensions as reference for all layers
-    first_image_data = base64.b64decode(layers[0])
-    first_image = Image.open(io.BytesIO(first_image_data))
-    first_image = first_image.convert('L')
-    reference_width, reference_height = first_image.size
-    
-    try:
+            aa_sigma = 0.5
+        if aa_sigma < 0:
+            aa_sigma = 0
+        if aa_sigma > 2.0:
+            aa_sigma = 2.0
+        # Normalize heights to floats with a sane default
+        height_values = []
+        for i in range(num_layers):
+            try:
+                val = float(heights[i]) if i < len(heights) else 2.0
+                if val <= 0:
+                    val = 2.0
+            except Exception:
+                val = 2.0
+            height_values.append(val)
+
+        stl_files = []
+        z_offsets = []
+        for idx in range(num_layers):
+            if idx == 0:
+                z_offsets.append(0.0)
+                continue
+            placement = positions[idx] if idx < len(positions) else "stack"
+            if placement == "same":
+                z_offsets.append(z_offsets[idx - 1])
+            else:
+                z_offsets.append(z_offsets[idx - 1] + height_values[idx - 1])
+
+        # Get first layer dimensions as reference for all layers
+        first_image_data = base64.b64decode(layers[0])
+        first_image = Image.open(io.BytesIO(first_image_data))
+        first_image = first_image.convert('L')
+        reference_width, reference_height = first_image.size
+
         for layer_idx, layer_image_b64 in enumerate(layers):
             # Decode base64 image
             image_data = base64.b64decode(layer_image_b64)
             image = Image.open(io.BytesIO(image_data))
-            
+
             # Convert to grayscale
             image = image.convert('L')
-            
+
             # Normalize all layers to reference size for consistent scaling
             if image.size != (reference_width, reference_height):
                 image = image.resize((reference_width, reference_height), Image.Resampling.LANCZOS)
-            
+
             width, height = reference_width, reference_height
-            
+
             # Optimized smoothing - skip upsampling here since contour generation handles it
             # close_size=1 and open_size=1 disable morphological closing/opening which would
             # fill the inside of hollow/ring-shaped selections.
@@ -187,10 +253,10 @@ def generate_stl():
                 mask = smooth_binary_mask(image, threshold=edge_threshold, blur_radius=1.5, close_size=1, open_size=1)
             else:
                 mask = smooth_binary_mask(image, threshold=edge_threshold, blur_radius=0, close_size=1, open_size=1)
-            
+
             # Convert PIL image to numpy array
             mask_array = np.array(mask) > 128
-            
+
             # Generate STL for this layer using grid-based approach (cleaner topology, faster repair)
             z_offset = z_offsets[layer_idx]
             thickness = height_values[layer_idx]
@@ -201,37 +267,39 @@ def generate_stl():
                 z_offset,
                 thickness
             )
-            
+
             stl_files.append({
                 'name': f'layer_{layer_idx + 1}.stl',
                 'content': stl_content
             })
-        
+
         # Create ZIP file containing all STL files
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
             for stl_file in stl_files:
                 zip_file.writestr(stl_file['name'], stl_file['content'])
-        
+
         zip_buffer.seek(0)
         zip_b64 = base64.b64encode(zip_buffer.read()).decode('utf-8')
-        
+
         # Verify we have valid STL files
         if not stl_files:
-            return jsonify({'error': 'No valid geometry generated. Try adjusting parameters.'})
-        
+            return jsonify({'error': 'No valid geometry generated. Try adjusting parameters.'}), 400
+
         # Check each STL for validity
         for stl_file in stl_files:
             content = stl_file['content']
             if 'facet' not in content or content.count('endfacet') == 0:
                 print(f"Warning: {stl_file['name']} has no valid facets")
-        
+
         return jsonify({'zip_file': zip_b64, 'num_layers': num_layers})
-    
+
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({'error': f'Generation error: {str(e)}'})
+        return jsonify({'error': f'Generation error: {str(e)}'}), 500
+    finally:
+        request_gate.release()
 
 def point_in_polygon(point, polygon):
     """Ray-casting algorithm to test if a (y,x) point is inside a polygon."""
@@ -1519,4 +1587,4 @@ def create_triangle(v1, v2, v3):
     )
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=8080)
+    app.run(debug=os.getenv('FLASK_DEBUG', '').lower() in ('1', 'true', 'yes'), host='0.0.0.0', port=8080)
