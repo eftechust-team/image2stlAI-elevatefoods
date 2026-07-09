@@ -1,6 +1,7 @@
 services:
   - type: web
     name: AIwebsite-genstl
+    rootDir: AIGenSTL
     env: python
     region: oregon
     plan: free

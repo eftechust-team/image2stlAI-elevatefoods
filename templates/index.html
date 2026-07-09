@@ -916,8 +916,18 @@
                         height: 2.0  // Fixed 2mm height
                     })
                 });
-                
-                const data = await response.json();
+
+                const responseText = await response.text();
+                let data = null;
+                try {
+                    data = responseText ? JSON.parse(responseText) : null;
+                } catch (parseError) {
+                    throw new Error(responseText || `Server returned ${response.status}`);
+                }
+
+                if (!response.ok) {
+                    throw new Error((data && data.error) ? data.error : responseText || `Server returned ${response.status}`);
+                }
                 
                 if (data.error) {
                     alert('Error: ' + data.error);
