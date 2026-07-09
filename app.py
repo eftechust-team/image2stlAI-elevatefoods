@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, render_template_string, request, jsonify, session
 import requests
 import os
 from PIL import Image, ImageFilter
@@ -62,9 +62,57 @@ def increment_image_generation_count():
     session['image_generation_count'] = get_image_generation_count() + 1
     session.modified = True
 
+
+@app.after_request
+def add_no_cache_headers(response):
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
+
+def image_to_base64_png(image):
+    buffer = io.BytesIO()
+    image.save(buffer, format='PNG')
+    return base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+
+def extract_main_subject_image(image):
+    """Extract black linework from a white-background upload without filling holes."""
+    image = image.convert('RGB')
+
+    # Keep the processing manageable for large camera uploads.
+    max_dimension = 1600
+    if max(image.size) > max_dimension:
+        scale = max_dimension / float(max(image.size))
+        new_size = (max(1, int(image.size[0] * scale)), max(1, int(image.size[1] * scale)))
+        image = image.resize(new_size, Image.Resampling.LANCZOS)
+
+    gray = image.convert('L')
+    gray_array = np.array(gray, dtype=np.float32)
+
+    # Estimate a threshold for the dark ink/pen strokes, but keep the output
+    # strictly binary so interior white spaces stay white.
+    try:
+        otsu_threshold = float(filters.threshold_otsu(gray_array))
+    except Exception:
+        otsu_threshold = float(np.percentile(gray_array, 35)) if gray_array.size else 200.0
+
+    foreground_threshold = int(min(235, max(110, otsu_threshold + 25.0)))
+    dark_mask = gray_array < foreground_threshold
+
+    # Remove isolated specks only; do not close gaps or fill holes.
+    dark_mask = ndimage.binary_opening(dark_mask, structure=np.ones((2, 2)))
+    dark_mask = ndimage.binary_opening(dark_mask, structure=np.ones((2, 2)))
+
+    output_array = np.where(dark_mask, 0, 255).astype(np.uint8)
+    return Image.fromarray(output_array, mode='L')
+
 @app.route('/')
 def index():
-    return render_template('index.html')
+    template_path = os.path.join(app.root_path, 'templates', 'index.html')
+    with open(template_path, 'r', encoding='utf-8') as template_file:
+        return render_template_string(template_file.read())
 
 @app.route('/generate_images', methods=['POST'])
 def generate_images():
@@ -72,10 +120,6 @@ def generate_images():
     user_prompt = str(data.get('prompt', '')).strip()
     if not user_prompt:
         return jsonify({'error': 'Please enter a prompt.'}), 400
-
-    remaining_images = get_remaining_image_generations()
-    if remaining_images <= 0:
-        return jsonify({'error': f'Image limit reached. Each person can generate at most {MAX_IMAGES_PER_SESSION} images.', 'remaining_images': 0}), 429
 
     slot_acquired = request_gate.acquire(timeout=2)
     if not slot_acquired:
@@ -104,8 +148,7 @@ def generate_images():
             result = response.json()
             if 'data' in result and len(result['data']) > 0:
                 image_data = result['data'][0]['b64_json']
-                increment_image_generation_count()
-                return jsonify({'image': image_data, 'remaining_images': get_remaining_image_generations(), 'generated_count': get_image_generation_count()})
+                return jsonify({'image': image_data, 'generated_count': 1})
             return jsonify({'error': f'No image data in response: {result}'}), 502
 
         error_response = response.text
@@ -114,6 +157,29 @@ def generate_images():
         return jsonify({'error': f'API Error {response.status_code}: {error_response}'}), 502
     except requests.RequestException as exc:
         return jsonify({'error': f'Image generation request failed: {str(exc)}'}), 502
+    finally:
+        request_gate.release()
+
+
+@app.route('/process_uploaded_image', methods=['POST'])
+def process_uploaded_image():
+    slot_acquired = request_gate.acquire(timeout=2)
+    if not slot_acquired:
+        return jsonify({'error': 'Server is busy right now. Please try again in a moment.'}), 503
+
+    try:
+        if 'image' not in request.files:
+            return jsonify({'error': 'Please choose an image to upload.'}), 400
+
+        uploaded_file = request.files['image']
+        if not uploaded_file or not uploaded_file.filename:
+            return jsonify({'error': 'Please choose an image to upload.'}), 400
+
+        image = Image.open(uploaded_file.stream)
+        extracted_image = extract_main_subject_image(image)
+        return jsonify({'image': image_to_base64_png(extracted_image)})
+    except Exception as exc:
+        return jsonify({'error': f'Upload processing failed: {str(exc)}'}), 500
     finally:
         request_gate.release()
 

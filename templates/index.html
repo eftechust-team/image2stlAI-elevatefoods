@@ -141,6 +141,59 @@
         button:hover {
             background: #5568d3;
         }
+
+        .mode-button {
+            position: relative;
+            z-index: 1;
+            flex: 1;
+            padding: 14px 20px;
+            font-size: 15px;
+            transition: color 0.2s ease, transform 0.2s ease;
+            background: transparent !important;
+            color: #1f2a44;
+            border-radius: 999px;
+        }
+
+        .mode-switch {
+            position: relative;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+            padding: 6px;
+            border-radius: 999px;
+            background: #eef2ff;
+            border: 1px solid #d7def7;
+            box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.06);
+            overflow: hidden;
+        }
+
+        .mode-switch-thumb {
+            position: absolute;
+            top: 6px;
+            bottom: 6px;
+            left: 6px;
+            width: calc(50% - 6px);
+            border-radius: 999px;
+            background: linear-gradient(135deg, #667eea 0%, #4c63d2 100%);
+            box-shadow: 0 10px 18px rgba(76, 99, 210, 0.25);
+            transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), background 0.25s ease;
+            pointer-events: none;
+        }
+
+        .mode-button.is-active {
+            color: #ffffff;
+            transform: translateY(-1px);
+        }
+
+        .mode-button.is-inactive {
+            color: #1f2a44;
+            transform: none;
+        }
+
+        .mode-button:focus-visible {
+            outline: 3px solid rgba(102, 126, 234, 0.35);
+            outline-offset: 2px;
+        }
         
         button:disabled {
             background: #ccc;
@@ -356,12 +409,24 @@
         
         <!-- Image Generation Section -->
         <div class="section">
-            <h2>Step 1: Generate Images</h2>
-            <div class="input-group">
-                <input type="text" id="prompt" placeholder="Describe what you want to generate (e.g., cat, heart, star)">
-                <button id="generate">Generate Images</button>
+            <h2>Step 1: Choose Image Source</h2>
+            <div class="mode-switch" style="margin-bottom: 16px;">
+                <div id="modeSwitchThumb" class="mode-switch-thumb"></div>
+                <button id="aiModeBtn" class="mode-button" style="background: #667eea;">AI Image Mode</button>
+                <button id="uploadModeBtn" class="mode-button" style="background: #27ae60;">Upload Image Mode</button>
             </div>
-            <div id="status" class="status">Ready to generate images</div>
+            <div id="aiGenerationPanel" style="display: none;"></div>
+            <div id="uploadGenerationPanel" style="display: none;">
+                <div class="info-box" style="background: #e8f5e9; border-left-color: #27ae60; margin-bottom: 15px;">
+                    <p style="margin: 0; color: #1b5e20; font-weight: 600;">Upload a photo or scan with a white background and a black subject.</p>
+                    <p style="margin: 8px 0 0 0; color: #1b5e20; font-size: 13px;">The app will extract the main dark part and suppress softer shadows from camera photos.</p>
+                </div>
+                <div class="input-group">
+                    <input type="file" id="uploadImageInput" accept="image/*">
+                    <button id="uploadImageBtn">Upload &amp; Extract</button>
+                </div>
+                <div id="uploadStatus" class="status" style="margin-top: 0; display: none;"></div>
+            </div>
             <div id="images"></div>
         </div>
         
@@ -558,6 +623,7 @@
                     <input type="number" id="aaSigma" min="0" max="1.5" step="0.05" value="0.35" style="width:80px; padding:4px 6px; border:2px solid #ddd; border-radius:6px;" />
                 </label>
             </div>
+            <div id="workflowStatus" class="status" style="display:none;">Ready to generate STL files</div>
             <button id="generateSTL" style="display: none;">Generate STL Files</button>
             <div id="loadingSpinner" style="display: none; text-align: center; margin-top: 20px;">
                 <div style="display: inline-block;">
@@ -589,6 +655,14 @@
         let selectionDilationPx = 3;
         let selectionZoom = 1;
         let initialPrompt = '';
+        let currentImageSource = 'ai';
+        const aiGenerationMarkup = `
+            <div class="input-group">
+                <input type="text" id="prompt" placeholder="Describe what you want to generate (e.g., cat, heart, star)">
+                <button id="generate">Generate Images</button>
+            </div>
+            <div id="aiStatus" class="status">Enter a prompt to generate images.</div>
+        `;
 
         function sanitizeFilename(value) {
             const fallback = 'model';
@@ -613,10 +687,69 @@
             };
         }
 
-        // Generate Images
-        document.getElementById('generate').addEventListener('click', async () => {
+        function resetWorkflowStateForNewImageSource() {
+            selectedImage = null;
+            editedImage = null;
+            layerSelections = {};
+            layerHeights = {};
+            currentLayerIndex = -1;
+            document.getElementById('modeSelection').style.display = 'none';
+            document.getElementById('drawingSection').style.display = 'none';
+            document.getElementById('layerSetup').style.display = 'none';
+            document.getElementById('layersHeader').style.display = 'none';
+            document.getElementById('selectionSection2').style.display = 'none';
+            document.getElementById('aaControlsPanel').style.display = 'none';
+            document.getElementById('generateSTL').style.display = 'none';
+            document.getElementById('select').style.display = 'none';
+            document.getElementById('images').style.display = 'grid';
+            document.getElementById('images').innerHTML = '';
+        }
+
+        function setImageSourceMode(mode) {
+            currentImageSource = mode;
+            const aiPanel = document.getElementById('aiGenerationPanel');
+            const uploadPanel = document.getElementById('uploadGenerationPanel');
+            const aiBtn = document.getElementById('aiModeBtn');
+            const uploadBtn = document.getElementById('uploadModeBtn');
+            const thumb = document.getElementById('modeSwitchThumb');
+            const uploadStatus = document.getElementById('uploadStatus');
+
+            resetWorkflowStateForNewImageSource();
+
+            if (mode === 'upload') {
+                aiPanel.style.display = 'none';
+                aiPanel.innerHTML = '';
+                uploadPanel.style.display = 'block';
+                aiBtn.classList.remove('is-active');
+                aiBtn.classList.add('is-inactive');
+                uploadBtn.classList.remove('is-inactive');
+                uploadBtn.classList.add('is-active');
+                thumb.style.transform = 'translateX(100%)';
+                thumb.style.background = 'linear-gradient(135deg, #27ae60 0%, #1f8f4e 100%)';
+                uploadStatus.style.display = 'block';
+                uploadStatus.textContent = 'Upload an image to extract the main subject.';
+            } else {
+                aiPanel.style.display = 'block';
+                aiPanel.innerHTML = aiGenerationMarkup;
+                uploadPanel.style.display = 'none';
+                aiBtn.classList.remove('is-inactive');
+                aiBtn.classList.add('is-active');
+                uploadBtn.classList.remove('is-active');
+                uploadBtn.classList.add('is-inactive');
+                thumb.style.transform = 'translateX(0%)';
+                thumb.style.background = 'linear-gradient(135deg, #667eea 0%, #4c63d2 100%)';
+                document.getElementById('generate').addEventListener('click', handleAiGenerate);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            setImageSourceMode('ai');
+        });
+
+        async function handleAiGenerate() {
             const generateBtn = document.getElementById('generate');
             const prompt = document.getElementById('prompt').value;
+            const status = document.getElementById('aiStatus');
             if (!prompt.trim()) {
                 alert('Please enter a prompt');
                 return;
@@ -627,8 +760,6 @@
             }
             
             const imagesDiv = document.getElementById('images');
-            const status = document.getElementById('status');
-            
             imagesDiv.innerHTML = '';
             status.textContent = 'Starting generation...';
             generateBtn.disabled = true;
@@ -645,12 +776,6 @@
                         body: JSON.stringify({ prompt })
                     });
                     const data = await response.json();
-
-                    if (response.status === 429) {
-                        status.textContent = data.error || 'Image quota reached for this session.';
-                        generateBtn.disabled = true;
-                        break;
-                    }
 
                     if (response.status === 503) {
                         status.textContent = data.error || 'Server is busy right now.';
@@ -694,6 +819,64 @@
             if (remainingImages > 0) {
                 generateBtn.disabled = false;
             }
+        }
+
+        document.getElementById('aiModeBtn').addEventListener('click', () => setImageSourceMode('ai'));
+        document.getElementById('uploadModeBtn').addEventListener('click', () => setImageSourceMode('upload'));
+
+        document.getElementById('uploadImageBtn').addEventListener('click', async () => {
+            const uploadInput = document.getElementById('uploadImageInput');
+            const status = document.getElementById('uploadStatus');
+            const uploadBtn = document.getElementById('uploadImageBtn');
+            const file = uploadInput.files && uploadInput.files[0];
+
+            if (!file) {
+                alert('Please choose an image to upload.');
+                return;
+            }
+
+            setImageSourceMode('upload');
+            status.style.display = 'block';
+            status.textContent = 'Uploading and extracting the main subject...';
+            uploadBtn.disabled = true;
+
+            try {
+                const formData = new FormData();
+                formData.append('image', file);
+
+                const response = await fetch('/process_uploaded_image', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (!response.ok || data.error) {
+                    throw new Error(data.error || 'Upload processing failed.');
+                }
+
+                const imagesDiv = document.getElementById('images');
+                imagesDiv.innerHTML = '';
+                imagesDiv.style.display = 'grid';
+
+                const imgElement = document.createElement('img');
+                imgElement.src = 'data:image/png;base64,' + data.image;
+                imgElement.onclick = () => selectImage(data.image, imgElement);
+                imagesDiv.appendChild(imgElement);
+
+                const sourceName = (file.name || 'uploaded_image').replace(/\.[^.]+$/, '');
+                initialPrompt = initialPrompt || sourceName;
+
+                selectImage(data.image, imgElement);
+                document.getElementById('selectionSection').style.display = 'block';
+                status.textContent = 'Uploaded image extracted. Choose a generation mode to continue.';
+            } catch (error) {
+                console.error('Error:', error);
+                status.textContent = 'Error processing uploaded image';
+                alert('Error: ' + error.message);
+            } finally {
+                uploadBtn.disabled = false;
+            }
         });
 
         // Select Image
@@ -713,7 +896,7 @@
         // Mode Selection Handlers
         document.getElementById('fastGenerateBtn').addEventListener('click', async () => {
             // Directly generate with default settings: 60mm length, 2mm height
-            const status = document.getElementById('status');
+            const status = document.getElementById('workflowStatus');
             const btn = document.getElementById('fastGenerateBtn');
             
             // Show loading state
@@ -721,6 +904,7 @@
             btn.innerHTML = '<span style="font-size: 24px;">⏳</span><span style="font-weight: 700;">Generating STL...</span><span style="font-size: 12px; font-weight: 400; opacity: 0.9;">Please wait</span>';
             btn.disabled = true;
             btn.style.opacity = '0.7';
+            status.style.display = 'block';
             status.textContent = '⚙️ Fast generating STL... Please wait.';
             
             try {
@@ -1900,7 +2084,11 @@
                 
                 // Show loading spinner
                 document.getElementById('loadingSpinner').style.display = 'block';
-                document.getElementById('status').textContent = '';
+                const workflowStatus = document.getElementById('workflowStatus');
+                if (workflowStatus) {
+                    workflowStatus.style.display = 'block';
+                    workflowStatus.textContent = '';
+                }
                 
                 const antiAliasing = document.getElementById('antiAliasing').checked;
                 const edgeThreshold = parseInt(document.getElementById('edgeThreshold').value, 10);
@@ -1930,7 +2118,7 @@
                 
                 if (data.error) {
                     alert('Error generating STL: ' + data.error);
-                    document.getElementById('status').textContent = 'Error generating STL';
+                    if (workflowStatus) workflowStatus.textContent = 'Error generating STL';
                     return;
                 }
                 
@@ -1940,11 +2128,11 @@
                 a.download = `${getModelFilenameStem()}.zip`;
                 a.click();
                 
-                document.getElementById('status').textContent = `Generated ${data.num_layers} STL files in ZIP!`;
+                if (workflowStatus) workflowStatus.textContent = `Generated ${data.num_layers} STL files in ZIP!`;
             } catch (error) {
                 console.error('Error:', error);
                 alert('Error: ' + error.message);
-                document.getElementById('status').textContent = 'Error generating STL files';
+                if (workflowStatus) workflowStatus.textContent = 'Error generating STL files';
                 // Hide loading spinner on error
                 document.getElementById('loadingSpinner').style.display = 'none';
             }
