@@ -392,6 +392,225 @@
             border-radius: 4px;
             margin: 15px 0;
         }
+
+        .upload-compare-panel {
+            display: none;
+            gap: 16px;
+            margin-top: 18px;
+            flex-wrap: wrap;
+        }
+
+        .upload-result-card {
+            flex: 1;
+            min-width: 280px;
+            border: 2px solid #e6e8f0;
+            border-radius: 14px;
+            padding: 14px;
+            background: #fbfcff;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+        }
+
+        .upload-result-card h3 {
+            margin: 0 0 10px 0;
+            color: #1f2a44;
+            font-size: 15px;
+        }
+
+        .upload-result-card img {
+            width: 100%;
+            max-height: 360px;
+            object-fit: contain;
+            border-radius: 10px;
+            background: #fff;
+            border: 1px solid #dde3f0;
+        }
+
+        .upload-editor-overlay {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(15, 23, 42, 0.72);
+            z-index: 2500;
+            padding: 24px;
+        }
+
+        .upload-editor-modal {
+            width: min(1100px, 100%);
+            max-height: 92vh;
+            overflow: auto;
+            border-radius: 20px;
+            background: linear-gradient(180deg, #ffffff 0%, #f7f9ff 100%);
+            box-shadow: 0 30px 80px rgba(2, 6, 23, 0.4);
+            border: 1px solid rgba(102, 126, 234, 0.18);
+            padding: 18px;
+        }
+
+        .upload-editor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 14px;
+        }
+
+        .upload-editor-header h2 {
+            margin: 0;
+            color: #172033;
+        }
+
+        .upload-editor-layout {
+            display: grid;
+            grid-template-columns: minmax(320px, 1.4fr) minmax(280px, 0.9fr);
+            gap: 18px;
+            align-items: start;
+        }
+
+        .upload-editor-canvas-wrap {
+            background: #111827;
+            border-radius: 16px;
+            padding: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+
+        .upload-editor-canvas-wrap canvas {
+            width: 100%;
+            height: auto;
+            display: block;
+            border-radius: 12px;
+            background:
+                linear-gradient(45deg, #dbe4ff 25%, transparent 25%),
+                linear-gradient(-45deg, #dbe4ff 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #dbe4ff 75%),
+                linear-gradient(-45deg, transparent 75%, #dbe4ff 75%);
+            background-size: 18px 18px;
+            background-position: 0 0, 0 9px, 9px -9px, -9px 0px;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            cursor: crosshair;
+        }
+
+        .upload-editor-stage {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .upload-frame-overlay {
+            position: absolute;
+            border: 3px solid #27ae60;
+            border-radius: 10px;
+            pointer-events: none;
+            display: none;
+            background: transparent;
+        }
+
+        .upload-frame-handle {
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            border-radius: 4px;
+            background: #ffffff;
+            border: 2px solid #27ae60;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
+            pointer-events: auto;
+        }
+
+        .upload-frame-handle[data-handle="tl"] { left: -9px; top: -9px; cursor: nwse-resize; }
+        .upload-frame-handle[data-handle="tm"] { left: calc(50% - 9px); top: -9px; cursor: ns-resize; }
+        .upload-frame-handle[data-handle="tr"] { right: -9px; top: -9px; cursor: nesw-resize; }
+        .upload-frame-handle[data-handle="rm"] { right: -9px; top: calc(50% - 9px); cursor: ew-resize; }
+        .upload-frame-handle[data-handle="br"] { right: -9px; bottom: -9px; cursor: nwse-resize; }
+        .upload-frame-handle[data-handle="bm"] { left: calc(50% - 9px); bottom: -9px; cursor: ns-resize; }
+        .upload-frame-handle[data-handle="bl"] { left: -9px; bottom: -9px; cursor: nesw-resize; }
+        .upload-frame-handle[data-handle="lm"] { left: -9px; top: calc(50% - 9px); cursor: ew-resize; }
+
+        .upload-editor-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .upload-editor-group {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            padding: 14px;
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+        }
+
+        .upload-editor-group h3 {
+            margin: 0 0 12px 0;
+            font-size: 15px;
+            color: #1f2937;
+        }
+
+        .upload-slider-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .upload-slider-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .upload-slider-row label {
+            min-width: 96px;
+            color: #374151;
+            font-size: 13px;
+        }
+
+        .upload-slider-row input[type="range"] {
+            flex: 1;
+            width: auto;
+        }
+
+        .upload-slider-value {
+            min-width: 56px;
+            text-align: right;
+            font-size: 13px;
+            color: #475569;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .crop-hint {
+            font-size: 13px;
+            color: #64748b;
+            line-height: 1.45;
+        }
+
+        .upload-editor-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .upload-editor-actions button {
+            flex: 1;
+            min-width: 120px;
+        }
+
+        .upload-editor-actions .danger-btn {
+            background: #e2e8f0;
+            color: #1f2937;
+        }
+
+        .upload-editor-actions .danger-btn:hover {
+            background: #cbd5e1;
+        }
+
+        .upload-crop-outline {
+            position: absolute;
+            border: 2px dashed #27ae60;
+            box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.28);
+            pointer-events: none;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -423,9 +642,10 @@
                 </div>
                 <div class="input-group">
                     <input type="file" id="uploadImageInput" accept="image/*">
-                    <button id="uploadImageBtn">Upload &amp; Extract</button>
+                    <button id="uploadImageBtn">Upload &amp; Edit</button>
                 </div>
                 <div id="uploadStatus" class="status" style="margin-top: 0; display: none;"></div>
+                <div id="uploadComparePanel" class="upload-compare-panel"></div>
             </div>
             <div id="images"></div>
         </div>
@@ -640,6 +860,66 @@
         </div>
     </div>
 
+    <div id="uploadEditorOverlay" class="upload-editor-overlay">
+        <div class="upload-editor-modal">
+            <div class="upload-editor-header">
+                <div>
+                    <h2>Prepare Uploaded Image</h2>
+                    <p style="margin:6px 0 0 0; color:#5b6478; font-size:14px;">Adjust brightness, contrast, and crop before extraction.</p>
+                </div>
+                <button id="uploadEditorCloseBtn" type="button" class="danger-btn">Close</button>
+            </div>
+            <div class="upload-editor-layout">
+                <div class="upload-editor-canvas-wrap">
+                    <div style="position:relative; width:100%;">
+                        <canvas id="uploadEditorCanvas" width="900" height="620"></canvas>
+                        <div id="uploadEditorStage" class="upload-editor-stage">
+                            <div id="uploadCropOverlay" class="upload-frame-overlay">
+                                <span class="upload-frame-handle" data-handle="tl"></span>
+                                <span class="upload-frame-handle" data-handle="tm"></span>
+                                <span class="upload-frame-handle" data-handle="tr"></span>
+                                <span class="upload-frame-handle" data-handle="rm"></span>
+                                <span class="upload-frame-handle" data-handle="br"></span>
+                                <span class="upload-frame-handle" data-handle="bm"></span>
+                                <span class="upload-frame-handle" data-handle="bl"></span>
+                                <span class="upload-frame-handle" data-handle="lm"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="upload-editor-controls">
+                    <div class="upload-editor-group">
+                        <h3>Image Adjustments</h3>
+                        <div class="upload-slider-row">
+                            <label for="uploadBrightness">Brightness</label>
+                            <input type="range" id="uploadBrightness" min="-100" max="100" value="0">
+                            <span id="uploadBrightnessValue" class="upload-slider-value">0%</span>
+                        </div>
+                        <div class="upload-slider-row">
+                            <label for="uploadContrast">Contrast</label>
+                            <input type="range" id="uploadContrast" min="-100" max="100" value="0">
+                            <span id="uploadContrastValue" class="upload-slider-value">0%</span>
+                        </div>
+                    </div>
+                    <div class="upload-editor-group">
+                        <h3>Crop Image</h3>
+                        <p class="crop-hint">Drag the 8 handles on the green frame to resize the crop area. Use the frame itself to reposition it.</p>
+                        <div class="upload-editor-actions" style="margin-top:12px;">
+                            <button id="uploadResetAdjustmentsBtn" type="button" class="danger-btn">Reset Adjustments</button>
+                        </div>
+                    </div>
+                    <div class="upload-editor-group">
+                        <h3>Finish</h3>
+                        <div class="upload-editor-actions">
+                            <button id="uploadCancelEditBtn" type="button" class="danger-btn">Cancel</button>
+                            <button id="uploadFinishEditBtn" type="button" style="background:#27ae60;">Finish</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         let selectedImage = null;
         let editedImage = null;
@@ -656,6 +936,21 @@
         let selectionZoom = 1;
         let initialPrompt = '';
         let currentImageSource = 'ai';
+        let uploadEditorFile = null;
+        let uploadEditorImage = null;
+        let uploadEditorState = {
+            brightness: 0,
+            contrast: 0,
+            crop: null,
+            isDragging: false,
+            dragStart: null,
+            dragCurrent: null,
+            dragStartStage: null,
+            dragCurrentStage: null,
+            dragMode: null,
+            dragHandle: null,
+            dragCropStart: null
+        };
         const aiGenerationMarkup = `
             <div class="input-group">
                 <input type="text" id="prompt" placeholder="Describe what you want to generate (e.g., cat, heart, star)">
@@ -703,6 +998,373 @@
             document.getElementById('select').style.display = 'none';
             document.getElementById('images').style.display = 'grid';
             document.getElementById('images').innerHTML = '';
+            const comparePanel = document.getElementById('uploadComparePanel');
+            if (comparePanel) {
+                comparePanel.style.display = 'none';
+                comparePanel.innerHTML = '';
+            }
+            hideUploadEditor();
+        }
+
+        function hideUploadEditor() {
+            const overlay = document.getElementById('uploadEditorOverlay');
+            if (overlay) {
+                overlay.style.display = 'none';
+            }
+            uploadEditorFile = null;
+            uploadEditorImage = null;
+            uploadEditorState = {
+                brightness: 0,
+                contrast: 0,
+                crop: null,
+                isDragging: false,
+                dragStart: null,
+                dragCurrent: null,
+                dragStartStage: null,
+                dragCurrentStage: null,
+                dragMode: null,
+                dragHandle: null,
+                dragCropStart: null
+            };
+        }
+
+        function getUploadEditorCanvas() {
+            return document.getElementById('uploadEditorCanvas');
+        }
+
+        function getUploadCropOverlayElement() {
+            return document.getElementById('uploadCropOverlay');
+        }
+
+        function getUploadEditorStageElement() {
+            return document.getElementById('uploadEditorStage');
+        }
+
+        function getUploadEditorDisplayRect() {
+            const canvas = getUploadEditorCanvas();
+            if (!canvas || !uploadEditorImage) return null;
+            const scale = Math.min(canvas.width / uploadEditorImage.width, canvas.height / uploadEditorImage.height);
+            const drawWidth = uploadEditorImage.width * scale;
+            const drawHeight = uploadEditorImage.height * scale;
+            const offsetX = (canvas.width - drawWidth) / 2;
+            const offsetY = (canvas.height - drawHeight) / 2;
+            return { scale, drawWidth, drawHeight, offsetX, offsetY };
+        }
+
+        function clampUploadEditorCrop(crop) {
+            if (!uploadEditorImage || !crop) return null;
+            const left = Math.max(0, Math.min(crop.left, crop.right));
+            const right = Math.min(uploadEditorImage.width, Math.max(crop.left, crop.right));
+            const top = Math.max(0, Math.min(crop.top, crop.bottom));
+            const bottom = Math.min(uploadEditorImage.height, Math.max(crop.top, crop.bottom));
+            if (right - left < 4 || bottom - top < 4) return null;
+            return { left, top, right, bottom };
+        }
+
+        function getUploadEditorCropRect() {
+            return clampUploadEditorCrop(uploadEditorState.crop);
+        }
+
+        function getUploadEditorCropDisplayRect(cropRect) {
+            const displayRect = getUploadEditorDisplayRect();
+            const canvas = getUploadEditorCanvas();
+            if (!displayRect || !canvas || !cropRect) return null;
+            const canvasRect = canvas.getBoundingClientRect();
+            const scaleX = canvasRect.width / canvas.width;
+            const scaleY = canvasRect.height / canvas.height;
+            return {
+                left: (displayRect.offsetX + cropRect.left * displayRect.scale) * scaleX,
+                top: (displayRect.offsetY + cropRect.top * displayRect.scale) * scaleY,
+                width: Math.max(0, (cropRect.right - cropRect.left) * displayRect.scale * scaleX),
+                height: Math.max(0, (cropRect.bottom - cropRect.top) * displayRect.scale * scaleY)
+            };
+        }
+
+        function createDefaultUploadCrop() {
+            if (!uploadEditorImage) return null;
+            return clampUploadEditorCrop({
+                left: 0,
+                top: 0,
+                right: uploadEditorImage.width,
+                bottom: uploadEditorImage.height
+            });
+        }
+
+        function setUploadEditorCrop(crop) {
+            uploadEditorState.crop = clampUploadEditorCrop(crop);
+            drawUploadEditorPreview();
+        }
+
+        function moveUploadEditorCropFromStart(startCrop, deltaX, deltaY) {
+            if (!startCrop) return;
+            const width = startCrop.right - startCrop.left;
+            const height = startCrop.bottom - startCrop.top;
+            const maxLeft = uploadEditorImage.width - width;
+            const maxTop = uploadEditorImage.height - height;
+            const left = Math.max(0, Math.min(maxLeft, startCrop.left + deltaX));
+            const top = Math.max(0, Math.min(maxTop, startCrop.top + deltaY));
+            setUploadEditorCrop({
+                left,
+                top,
+                right: left + width,
+                bottom: top + height
+            });
+        }
+
+        function resizeUploadEditorCrop(handle, point) {
+            const startCrop = uploadEditorState.dragCropStart;
+            if (!startCrop) return;
+            const minSize = 24;
+            let nextCrop = { ...startCrop };
+            if (handle === 'tl') {
+                nextCrop.left = Math.min(point.x, startCrop.right - minSize);
+                nextCrop.top = Math.min(point.y, startCrop.bottom - minSize);
+            } else if (handle === 'tm') {
+                nextCrop.top = Math.min(point.y, startCrop.bottom - minSize);
+            } else if (handle === 'tr') {
+                nextCrop.right = Math.max(point.x, startCrop.left + minSize);
+                nextCrop.top = Math.min(point.y, startCrop.bottom - minSize);
+            } else if (handle === 'rm') {
+                nextCrop.right = Math.max(point.x, startCrop.left + minSize);
+            } else if (handle === 'bl') {
+                nextCrop.left = Math.min(point.x, startCrop.right - minSize);
+                nextCrop.bottom = Math.max(point.y, startCrop.top + minSize);
+            } else if (handle === 'bm') {
+                nextCrop.bottom = Math.max(point.y, startCrop.top + minSize);
+            } else if (handle === 'br') {
+                nextCrop.right = Math.max(point.x, startCrop.left + minSize);
+                nextCrop.bottom = Math.max(point.y, startCrop.top + minSize);
+            } else if (handle === 'lm') {
+                nextCrop.left = Math.min(point.x, startCrop.right - minSize);
+            }
+            setUploadEditorCrop(nextCrop);
+        }
+
+        function canvasPointToImagePoint(point) {
+            const displayRect = getUploadEditorDisplayRect();
+            if (!displayRect) return null;
+            return {
+                x: (point.x - displayRect.offsetX) / displayRect.scale,
+                y: (point.y - displayRect.offsetY) / displayRect.scale
+            };
+        }
+
+        function cssRectToImageCrop(cssRect) {
+            return clampUploadEditorCrop(cssRect);
+        }
+
+        function getUploadEditorPointerPoint(event) {
+            const canvas = getUploadEditorCanvas();
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: Math.max(0, Math.min(canvas.width, (event.clientX - rect.left) * (canvas.width / rect.width))),
+                y: Math.max(0, Math.min(canvas.height, (event.clientY - rect.top) * (canvas.height / rect.height)))
+            };
+        }
+
+        function updateUploadEditorValues() {
+            const brightness = document.getElementById('uploadBrightness');
+            const contrast = document.getElementById('uploadContrast');
+            const brightnessValue = document.getElementById('uploadBrightnessValue');
+            const contrastValue = document.getElementById('uploadContrastValue');
+            if (brightness) brightness.value = uploadEditorState.brightness;
+            if (contrast) contrast.value = uploadEditorState.contrast;
+            if (brightnessValue) brightnessValue.textContent = `${uploadEditorState.brightness}%`;
+            if (contrastValue) contrastValue.textContent = `${uploadEditorState.contrast}%`;
+        }
+
+        function drawUploadEditorPreview() {
+            const canvas = getUploadEditorCanvas();
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const overlay = document.getElementById('uploadCropOverlay');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (!uploadEditorImage) {
+                ctx.fillStyle = '#0f172a';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#cbd5e1';
+                ctx.font = '18px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('Load an image to preview it here', canvas.width / 2, canvas.height / 2);
+                if (overlay) overlay.style.display = 'none';
+                return;
+            }
+
+            const displayRect = getUploadEditorDisplayRect();
+            ctx.save();
+            ctx.filter = `brightness(${100 + uploadEditorState.brightness}%) contrast(${100 + uploadEditorState.contrast}%)`;
+            ctx.drawImage(uploadEditorImage, displayRect.offsetX, displayRect.offsetY, displayRect.drawWidth, displayRect.drawHeight);
+            ctx.restore();
+
+            const cropRect = getUploadEditorCropRect();
+            const cssCropRect = getUploadEditorCropDisplayRect(cropRect);
+
+            if (!cssCropRect || !overlay) {
+                if (overlay) overlay.style.display = 'none';
+                return;
+            }
+
+            overlay.style.display = 'block';
+            overlay.style.left = `${Math.max(0, cssCropRect.left)}px`;
+            overlay.style.top = `${Math.max(0, cssCropRect.top)}px`;
+            overlay.style.width = `${Math.max(0, cssCropRect.width)}px`;
+            overlay.style.height = `${Math.max(0, cssCropRect.height)}px`;
+        }
+
+        function setUploadEditorCropFromCanvasPoints(startPoint, endPoint) {
+            const displayRect = getUploadEditorDisplayRect();
+            if (!displayRect || !uploadEditorImage) return;
+
+            const clampPoint = (point) => ({
+                x: Math.max(displayRect.offsetX, Math.min(displayRect.offsetX + displayRect.drawWidth, point.x)),
+                y: Math.max(displayRect.offsetY, Math.min(displayRect.offsetY + displayRect.drawHeight, point.y))
+            });
+
+            const p1 = clampPoint(startPoint);
+            const p2 = clampPoint(endPoint);
+            uploadEditorState.crop = clampUploadEditorCrop({
+                left: Math.round((Math.min(p1.x, p2.x) - displayRect.offsetX) / displayRect.scale),
+                top: Math.round((Math.min(p1.y, p2.y) - displayRect.offsetY) / displayRect.scale),
+                right: Math.round((Math.max(p1.x, p2.x) - displayRect.offsetX) / displayRect.scale),
+                bottom: Math.round((Math.max(p1.y, p2.y) - displayRect.offsetY) / displayRect.scale)
+            });
+        }
+
+        async function openUploadEditorFromFile(file) {
+            uploadEditorFile = file;
+            uploadEditorState.brightness = 0;
+            uploadEditorState.contrast = 0;
+            uploadEditorState.crop = null;
+            uploadEditorState.isDragging = false;
+            uploadEditorState.dragStart = null;
+            uploadEditorState.dragCurrent = null;
+            uploadEditorState.dragMode = null;
+            uploadEditorState.dragHandle = null;
+            uploadEditorState.dragCropStart = null;
+
+            const dataUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(new Error('Unable to read the uploaded image.'));
+                reader.readAsDataURL(file);
+            });
+
+            uploadEditorImage = await new Promise((resolve, reject) => {
+                const image = new Image();
+                image.onload = () => resolve(image);
+                image.onerror = () => reject(new Error('Unable to load the uploaded image.'));
+                image.src = dataUrl;
+            });
+
+            uploadEditorState.crop = createDefaultUploadCrop();
+
+            const overlay = document.getElementById('uploadEditorOverlay');
+            if (overlay) overlay.style.display = 'flex';
+            updateUploadEditorValues();
+            drawUploadEditorPreview();
+        }
+
+        async function finishUploadEditor() {
+            if (!uploadEditorImage || !uploadEditorFile) {
+                throw new Error('No uploaded image is ready for extraction.');
+            }
+
+            const cropRect = getUploadEditorCropRect();
+            const sourceWidth = cropRect ? (cropRect.right - cropRect.left) : uploadEditorImage.width;
+            const sourceHeight = cropRect ? (cropRect.bottom - cropRect.top) : uploadEditorImage.height;
+            const outputCanvas = document.createElement('canvas');
+            outputCanvas.width = sourceWidth;
+            outputCanvas.height = sourceHeight;
+            const outputCtx = outputCanvas.getContext('2d');
+            outputCtx.filter = `brightness(${100 + uploadEditorState.brightness}%) contrast(${100 + uploadEditorState.contrast}%)`;
+
+            if (cropRect) {
+                outputCtx.drawImage(
+                    uploadEditorImage,
+                    cropRect.left,
+                    cropRect.top,
+                    cropRect.right - cropRect.left,
+                    cropRect.bottom - cropRect.top,
+                    0,
+                    0,
+                    sourceWidth,
+                    sourceHeight
+                );
+            } else {
+                outputCtx.drawImage(uploadEditorImage, 0, 0, sourceWidth, sourceHeight);
+            }
+
+            outputCtx.filter = 'none';
+            const editedDataUrl = outputCanvas.toDataURL('image/png');
+            const editedBlob = await new Promise((resolve) => outputCanvas.toBlob(resolve, 'image/png'));
+            if (!editedBlob) {
+                throw new Error('Unable to prepare the edited image.');
+            }
+
+            const formData = new FormData();
+            const editedSourceName = (uploadEditorFile.name || 'uploaded_image').replace(/\.[^.]+$/, '');
+            formData.append('image', editedBlob, `${sanitizeFilename(editedSourceName)}_edited.png`);
+
+            const response = await fetch('/process_uploaded_image', {
+                method: 'POST',
+                body: formData
+            });
+
+            const responseText = await response.text();
+            let data = null;
+            try {
+                data = responseText ? JSON.parse(responseText) : null;
+            } catch (parseError) {
+                throw new Error(responseText || `Server returned ${response.status}`);
+            }
+
+            if (!response.ok || !data || data.error) {
+                throw new Error((data && data.error) ? data.error : responseText || 'Upload processing failed.');
+            }
+
+            const extractedDataUrl = 'data:image/png;base64,' + data.image;
+            const comparePanel = document.getElementById('uploadComparePanel');
+            if (comparePanel) {
+                comparePanel.innerHTML = '';
+                comparePanel.style.display = 'flex';
+
+                const editedCard = document.createElement('div');
+                editedCard.className = 'upload-result-card';
+                editedCard.innerHTML = '<h3>Edited image</h3><img id="uploadEditedPreview" alt="Edited upload preview">';
+
+                const extractedCard = document.createElement('div');
+                extractedCard.className = 'upload-result-card';
+                extractedCard.innerHTML = '<h3>Extracted image</h3><img id="uploadExtractedPreview" alt="Extracted upload preview">';
+
+                comparePanel.appendChild(editedCard);
+                comparePanel.appendChild(extractedCard);
+
+                const editedPreview = document.getElementById('uploadEditedPreview');
+                const extractedPreview = document.getElementById('uploadExtractedPreview');
+                editedPreview.src = editedDataUrl;
+                extractedPreview.src = extractedDataUrl;
+                editedPreview.onclick = () => selectImage(editedDataUrl.split(',')[1], editedPreview);
+                extractedPreview.onclick = () => selectImage(data.image, extractedPreview);
+            }
+
+            editedImage = editedDataUrl.split(',')[1];
+            const editedImgDisplay = document.getElementById('editedImageDisplay');
+            editedImgDisplay.src = editedDataUrl;
+            const layerSetupPreview = document.getElementById('layerSetupPreview');
+            layerSetupPreview.src = editedDataUrl;
+            layerSetupPreview.style.display = 'block';
+
+            const imagesDiv = document.getElementById('images');
+            imagesDiv.innerHTML = '';
+            imagesDiv.style.display = 'none';
+
+            const uploadedSourceName = (uploadEditorFile.name || 'uploaded_image').replace(/\.[^.]+$/, '');
+            initialPrompt = initialPrompt || uploadedSourceName;
+            selectImage(data.image, document.getElementById('uploadExtractedPreview'));
+            document.getElementById('selectionSection').style.display = 'block';
+            document.getElementById('uploadStatus').textContent = 'Edited image finished. Left is your edited upload, right is the extracted result.';
+            hideUploadEditor();
         }
 
         function setImageSourceMode(mode) {
@@ -837,45 +1499,134 @@
 
             setImageSourceMode('upload');
             status.style.display = 'block';
-            status.textContent = 'Uploading and extracting the main subject...';
+            status.textContent = 'Opening the image editor...';
             uploadBtn.disabled = true;
 
             try {
-                const formData = new FormData();
-                formData.append('image', file);
-
-                const response = await fetch('/process_uploaded_image', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                const data = await response.json();
-
-                if (!response.ok || data.error) {
-                    throw new Error(data.error || 'Upload processing failed.');
-                }
-
-                const imagesDiv = document.getElementById('images');
-                imagesDiv.innerHTML = '';
-                imagesDiv.style.display = 'grid';
-
-                const imgElement = document.createElement('img');
-                imgElement.src = 'data:image/png;base64,' + data.image;
-                imgElement.onclick = () => selectImage(data.image, imgElement);
-                imagesDiv.appendChild(imgElement);
-
-                const sourceName = (file.name || 'uploaded_image').replace(/\.[^.]+$/, '');
-                initialPrompt = initialPrompt || sourceName;
-
-                selectImage(data.image, imgElement);
-                document.getElementById('selectionSection').style.display = 'block';
-                status.textContent = 'Uploaded image extracted. Choose a generation mode to continue.';
+                await openUploadEditorFromFile(file);
+                status.textContent = 'Edit the image, then click Finish to extract it.';
             } catch (error) {
                 console.error('Error:', error);
                 status.textContent = 'Error processing uploaded image';
                 alert('Error: ' + error.message);
             } finally {
                 uploadBtn.disabled = false;
+            }
+        });
+
+        document.getElementById('uploadBrightness').addEventListener('input', (event) => {
+            uploadEditorState.brightness = parseInt(event.target.value, 10) || 0;
+            document.getElementById('uploadBrightnessValue').textContent = `${uploadEditorState.brightness}%`;
+            drawUploadEditorPreview();
+        });
+
+        document.getElementById('uploadContrast').addEventListener('input', (event) => {
+            uploadEditorState.contrast = parseInt(event.target.value, 10) || 0;
+            document.getElementById('uploadContrastValue').textContent = `${uploadEditorState.contrast}%`;
+            drawUploadEditorPreview();
+        });
+
+        document.getElementById('uploadResetAdjustmentsBtn').addEventListener('click', () => {
+            uploadEditorState.brightness = 0;
+            uploadEditorState.contrast = 0;
+            uploadEditorState.crop = null;
+            updateUploadEditorValues();
+            drawUploadEditorPreview();
+        });
+
+        document.getElementById('uploadCancelEditBtn').addEventListener('click', () => {
+            hideUploadEditor();
+            document.getElementById('uploadStatus').textContent = 'Upload cancelled.';
+        });
+
+        document.getElementById('uploadEditorCloseBtn').addEventListener('click', () => {
+            hideUploadEditor();
+            document.getElementById('uploadStatus').textContent = 'Upload editor closed.';
+        });
+
+        document.getElementById('uploadFinishEditBtn').addEventListener('click', async () => {
+            const status = document.getElementById('uploadStatus');
+            const finishBtn = document.getElementById('uploadFinishEditBtn');
+            try {
+                finishBtn.disabled = true;
+                status.style.display = 'block';
+                status.textContent = 'Extracting the edited image...';
+                await finishUploadEditor();
+            } catch (error) {
+                console.error('Error:', error);
+                status.textContent = 'Error processing uploaded image';
+                alert('Error: ' + error.message);
+            } finally {
+                finishBtn.disabled = false;
+            }
+        });
+
+        const uploadEditorStage = document.getElementById('uploadEditorStage');
+        const uploadCropOverlay = document.getElementById('uploadCropOverlay');
+
+        function beginUploadFrameDrag(event) {
+            if (!uploadEditorImage) return;
+            const crop = getUploadEditorCropRect();
+            if (!crop) return;
+            const pointerEvent = event.touches && event.touches.length ? event.touches[0] : event;
+            const handleElement = event.target && event.target.closest ? event.target.closest('.upload-frame-handle') : null;
+            const overlayBox = getUploadCropOverlayElement().getBoundingClientRect();
+            uploadEditorState.isDragging = true;
+            uploadEditorState.dragMode = 'resize';
+            uploadEditorState.dragHandle = handleElement ? handleElement.dataset.handle : null;
+            uploadEditorState.dragStart = getUploadEditorPointerPoint(pointerEvent);
+            uploadEditorState.dragCurrent = uploadEditorState.dragStart;
+            uploadEditorState.dragCropStart = { ...crop };
+            event.preventDefault();
+            event.stopPropagation();
+            drawUploadEditorPreview();
+        }
+
+        function updateUploadFrameDrag(event) {
+            if (!uploadEditorState.isDragging) return;
+            const pointerEvent = event.touches && event.touches.length ? event.touches[0] : event;
+            uploadEditorState.dragCurrent = getUploadEditorPointerPoint(pointerEvent);
+            if (!uploadEditorState.dragCropStart) return;
+
+            const currentImagePoint = canvasPointToImagePoint(pointerEvent);
+            if (!currentImagePoint) return;
+            resizeUploadEditorCrop(uploadEditorState.dragHandle, currentImagePoint);
+            drawUploadEditorPreview();
+            event.preventDefault();
+        }
+
+        function commitUploadFrameDrag() {
+            if (!uploadEditorState.isDragging) return;
+            uploadEditorState.isDragging = false;
+            uploadEditorState.dragStart = null;
+            uploadEditorState.dragCurrent = null;
+            uploadEditorState.dragMode = null;
+            uploadEditorState.dragHandle = null;
+            uploadEditorState.dragCropStart = null;
+            drawUploadEditorPreview();
+        }
+
+        uploadCropOverlay.addEventListener('mousedown', beginUploadFrameDrag);
+        uploadCropOverlay.addEventListener('touchstart', (event) => {
+            if (!event.touches.length) return;
+            beginUploadFrameDrag(event);
+        }, { passive: false });
+
+        document.addEventListener('mousemove', updateUploadFrameDrag);
+        document.addEventListener('mouseup', commitUploadFrameDrag);
+        document.addEventListener('touchmove', (event) => {
+            if (!uploadEditorState.isDragging || !event.touches.length) return;
+            updateUploadFrameDrag(event.touches[0]);
+        }, { passive: false });
+        document.addEventListener('touchend', (event) => {
+            if (!uploadEditorState.isDragging) return;
+            commitUploadFrameDrag();
+        }, { passive: false });
+
+        document.getElementById('uploadEditorOverlay').addEventListener('click', (event) => {
+            if (event.target.id === 'uploadEditorOverlay') {
+                hideUploadEditor();
+                document.getElementById('uploadStatus').textContent = 'Upload editor closed.';
             }
         });
 

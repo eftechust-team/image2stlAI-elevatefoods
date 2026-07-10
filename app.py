@@ -91,19 +91,25 @@ def extract_main_subject_image(image):
     gray = image.convert('L')
     gray_array = np.array(gray, dtype=np.float32)
 
-    # Estimate a threshold for the dark ink/pen strokes, but keep the output
-    # strictly binary so interior white spaces stay white.
+    # Use a conservative threshold for dark ink/pen strokes so the textured
+    # paper background and white interiors stay white.
     try:
-        otsu_threshold = float(filters.threshold_otsu(gray_array))
+        ink_floor = float(np.percentile(gray_array, 2.0))
     except Exception:
-        otsu_threshold = float(np.percentile(gray_array, 35)) if gray_array.size else 200.0
+        ink_floor = 80.0
 
-    foreground_threshold = int(min(235, max(110, otsu_threshold + 25.0)))
+    foreground_threshold = int(min(170, max(75, ink_floor + 55.0)))
     dark_mask = gray_array < foreground_threshold
 
     # Remove isolated specks only; do not close gaps or fill holes.
     dark_mask = ndimage.binary_opening(dark_mask, structure=np.ones((2, 2)))
     dark_mask = ndimage.binary_opening(dark_mask, structure=np.ones((2, 2)))
+
+    # If the mask is still too broad, tighten it once more instead of filling.
+    if np.mean(dark_mask) > 0.45:
+        foreground_threshold = int(max(65, foreground_threshold - 25))
+        dark_mask = gray_array < foreground_threshold
+        dark_mask = ndimage.binary_opening(dark_mask, structure=np.ones((2, 2)))
 
     output_array = np.where(dark_mask, 0, 255).astype(np.uint8)
     return Image.fromarray(output_array, mode='L')
