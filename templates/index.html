@@ -503,9 +503,12 @@
             position: absolute;
             border: 3px solid #27ae60;
             border-radius: 10px;
-            pointer-events: none;
+            pointer-events: auto;
             display: none;
             background: transparent;
+            touch-action: none;
+            user-select: none;
+            cursor: move;
         }
 
         .upload-frame-handle {
@@ -517,6 +520,7 @@
             border: 2px solid #27ae60;
             box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
             pointer-events: auto;
+            touch-action: none;
         }
 
         .upload-frame-handle[data-handle="tl"] { left: -9px; top: -9px; cursor: nwse-resize; }
@@ -949,6 +953,7 @@
             dragCurrentStage: null,
             dragMode: null,
             dragHandle: null,
+            dragInputType: null,
             dragCropStart: null
         };
         const aiGenerationMarkup = `
@@ -1241,6 +1246,7 @@
             uploadEditorState.dragCurrent = null;
             uploadEditorState.dragMode = null;
             uploadEditorState.dragHandle = null;
+            uploadEditorState.dragInputType = null;
             uploadEditorState.dragCropStart = null;
 
             const dataUrl = await new Promise((resolve, reject) => {
@@ -1564,63 +1570,102 @@
         const uploadEditorStage = document.getElementById('uploadEditorStage');
         const uploadCropOverlay = document.getElementById('uploadCropOverlay');
 
-        function beginUploadFrameDrag(event) {
+        function beginUploadFrameDrag(event, inputType) {
             if (!uploadEditorImage) return;
             const crop = getUploadEditorCropRect();
             if (!crop) return;
-            const pointerEvent = event.touches && event.touches.length ? event.touches[0] : event;
+            if (uploadEditorState.isDragging) return;
             const handleElement = event.target && event.target.closest ? event.target.closest('.upload-frame-handle') : null;
-            const overlayBox = getUploadCropOverlayElement().getBoundingClientRect();
+            const overlay = getUploadCropOverlayElement();
+            const pointerPoint = getUploadEditorPointerPoint(event);
+            const imagePoint = canvasPointToImagePoint(pointerPoint);
+            if (!overlay || !imagePoint) return;
             uploadEditorState.isDragging = true;
-            uploadEditorState.dragMode = 'resize';
+            uploadEditorState.dragMode = handleElement ? 'resize' : 'move';
             uploadEditorState.dragHandle = handleElement ? handleElement.dataset.handle : null;
-            uploadEditorState.dragStart = getUploadEditorPointerPoint(pointerEvent);
+            uploadEditorState.dragInputType = inputType || event.pointerType || event.type || 'pointer';
+            uploadEditorState.dragStart = imagePoint;
             uploadEditorState.dragCurrent = uploadEditorState.dragStart;
             uploadEditorState.dragCropStart = { ...crop };
+            if (overlay.setPointerCapture && event.pointerId !== undefined && event.pointerId !== null) {
+                try {
+                    overlay.setPointerCapture(event.pointerId);
+                } catch (captureError) {
+                    // Ignore capture failures and continue with the drag state we already set.
+                }
+            }
             event.preventDefault();
             event.stopPropagation();
             drawUploadEditorPreview();
         }
 
-        function updateUploadFrameDrag(event) {
+        function updateUploadFrameDrag(event, inputType) {
             if (!uploadEditorState.isDragging) return;
-            const pointerEvent = event.touches && event.touches.length ? event.touches[0] : event;
-            uploadEditorState.dragCurrent = getUploadEditorPointerPoint(pointerEvent);
+            const eventType = inputType || event.pointerType || event.type || 'pointer';
+            if (uploadEditorState.dragInputType && uploadEditorState.dragInputType !== eventType) return;
+            const pointerPoint = getUploadEditorPointerPoint(event);
+            const imagePoint = canvasPointToImagePoint(pointerPoint);
+            if (!imagePoint) return;
+            uploadEditorState.dragCurrent = imagePoint;
             if (!uploadEditorState.dragCropStart) return;
 
-            const currentImagePoint = canvasPointToImagePoint(pointerEvent);
-            if (!currentImagePoint) return;
-            resizeUploadEditorCrop(uploadEditorState.dragHandle, currentImagePoint);
+            if (uploadEditorState.dragMode === 'move') {
+                moveUploadEditorCropFromStart(
+                    uploadEditorState.dragCropStart,
+                    imagePoint.x - uploadEditorState.dragStart.x,
+                    imagePoint.y - uploadEditorState.dragStart.y
+                );
+            } else {
+                resizeUploadEditorCrop(uploadEditorState.dragHandle, imagePoint);
+            }
             drawUploadEditorPreview();
             event.preventDefault();
         }
 
-        function commitUploadFrameDrag() {
+        function commitUploadFrameDrag(event, inputType) {
             if (!uploadEditorState.isDragging) return;
+            const eventType = inputType || (event ? (event.pointerType || event.type || 'pointer') : uploadEditorState.dragInputType);
+            if (uploadEditorState.dragInputType && eventType && uploadEditorState.dragInputType !== eventType) return;
+            const overlay = getUploadCropOverlayElement();
+            if (overlay && event && overlay.releasePointerCapture && event.pointerId !== undefined && event.pointerId !== null) {
+                try {
+                    if (overlay.hasPointerCapture && overlay.hasPointerCapture(event.pointerId)) {
+                        overlay.releasePointerCapture(event.pointerId);
+                    }
+                } catch (releaseError) {
+                    // Ignore release failures; the drag state is being cleared either way.
+                }
+            }
             uploadEditorState.isDragging = false;
             uploadEditorState.dragStart = null;
             uploadEditorState.dragCurrent = null;
             uploadEditorState.dragMode = null;
             uploadEditorState.dragHandle = null;
+            uploadEditorState.dragInputType = null;
             uploadEditorState.dragCropStart = null;
             drawUploadEditorPreview();
         }
 
-        uploadCropOverlay.addEventListener('mousedown', beginUploadFrameDrag);
+        uploadCropOverlay.addEventListener('pointerdown', beginUploadFrameDrag);
+        uploadCropOverlay.addEventListener('pointermove', updateUploadFrameDrag);
+        uploadCropOverlay.addEventListener('pointerup', commitUploadFrameDrag);
+        uploadCropOverlay.addEventListener('pointercancel', commitUploadFrameDrag);
+        uploadCropOverlay.addEventListener('lostpointercapture', commitUploadFrameDrag);
+
+        uploadCropOverlay.addEventListener('mousedown', (event) => beginUploadFrameDrag(event, 'mouse'));
+        document.addEventListener('mousemove', (event) => updateUploadFrameDrag(event, 'mouse'));
+        document.addEventListener('mouseup', (event) => commitUploadFrameDrag(event, 'mouse'));
         uploadCropOverlay.addEventListener('touchstart', (event) => {
             if (!event.touches.length) return;
-            beginUploadFrameDrag(event);
+            beginUploadFrameDrag(event.touches[0], 'touch');
         }, { passive: false });
-
-        document.addEventListener('mousemove', updateUploadFrameDrag);
-        document.addEventListener('mouseup', commitUploadFrameDrag);
         document.addEventListener('touchmove', (event) => {
             if (!uploadEditorState.isDragging || !event.touches.length) return;
-            updateUploadFrameDrag(event.touches[0]);
+            updateUploadFrameDrag(event.touches[0], 'touch');
         }, { passive: false });
         document.addEventListener('touchend', (event) => {
             if (!uploadEditorState.isDragging) return;
-            commitUploadFrameDrag();
+            commitUploadFrameDrag(event.changedTouches && event.changedTouches.length ? event.changedTouches[0] : null, 'touch');
         }, { passive: false });
 
         document.getElementById('uploadEditorOverlay').addEventListener('click', (event) => {
