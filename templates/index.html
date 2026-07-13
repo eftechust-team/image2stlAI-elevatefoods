@@ -1945,8 +1945,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         image: selectedImage,
-                        height: 2.0,  // Fixed 2mm height
-                        filename_stem: getModelFilenameStem()
+                        height: 2.0  // Fixed 2mm height
                     })
                 });
 
@@ -1967,11 +1966,6 @@
                     status.textContent = 'Error generating STL';
                 } else {
                     status.textContent = '✅ STL generated successfully!';
-                    if (data.drive_upload && data.drive_upload.success) {
-                        status.textContent = `✅ STL generated successfully! Uploaded to Google Drive.`;
-                    } else if (data.drive_upload && data.drive_upload.message) {
-                        status.textContent = `✅ STL generated successfully! ${data.drive_upload.message}`;
-                    }
                     const blob = base64ToBlob(data.stl_file, 'application/octet-stream');
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -3155,8 +3149,7 @@
                         anti_aliasing: antiAliasing,
                         edge_threshold: Number.isFinite(edgeThreshold) ? edgeThreshold : 50,
                         aa_upsample: Number.isFinite(aaUpsample) ? aaUpsample : 6,
-                        aa_sigma: Number.isFinite(aaSigma) ? aaSigma : 0.35,
-                        filename_stem: getModelFilenameStem()
+                        aa_sigma: Number.isFinite(aaSigma) ? aaSigma : 0.35
                     })
                 });
                 
@@ -3176,13 +3169,8 @@
                 a.href = 'data:application/zip;base64,' + data.zip_file;
                 a.download = `${getModelFilenameStem()}.zip`;
                 a.click();
-
-                if (data.drive_upload && data.drive_upload.success) {
-                    if (workflowStatus) workflowStatus.textContent = `Generated ${data.num_layers} STL files in ZIP and uploaded to Google Drive.`;
-                } else if (data.drive_upload && data.drive_upload.message && workflowStatus) {
-                    workflowStatus.textContent = `Generated ${data.num_layers} STL files in ZIP. ${data.drive_upload.message}`;
-                }
-                if (!data.drive_upload && workflowStatus) workflowStatus.textContent = `Generated ${data.num_layers} STL files in ZIP!`;
+                
+                if (workflowStatus) workflowStatus.textContent = `Generated ${data.num_layers} STL files in ZIP!`;
             } catch (error) {
                 console.error('Error:', error);
                 alert('Error: ' + error.message);

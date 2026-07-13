@@ -1,23 +1,22 @@
 # -*- coding: utf-8 -*-
 from flask import Flask, render_template, render_template_string, request, jsonify, session
 import requests
-import json
 import os
+import re
 from PIL import Image, ImageFilter
 import io
 import base64
 import zipfile
 import threading
+import uuid
 import numpy as np
+from datetime import datetime, timezone
 from scipy import interpolate, ndimage
 from skimage import measure, transform, filters
 import mapbox_earcut as earcut
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
-from googleapiclient.errors import HttpError
+from urllib.parse import quote
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY') or os.getenv('SECRET_KEY') or 'AIGenSTL-local-dev-secret'
@@ -45,17 +44,15 @@ http_adapter = HTTPAdapter(
 http_session.mount('https://', http_adapter)
 http_session.mount('http://', http_adapter)
 
-GOOGLE_DRIVE_UPLOAD_ENABLED = os.getenv('GOOGLE_DRIVE_UPLOAD_ENABLED', 'true').strip().lower() not in ('0', 'false', 'no', 'off')
-GOOGLE_DRIVE_FOLDER_ID = os.getenv('GOOGLE_DRIVE_FOLDER_ID', '1SH32y4chGV-7QwxWYfG42HSTELqOQN1Y')
-GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON = os.getenv('GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON', '').strip()
-GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE = os.getenv('GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE', '').strip()
-GOOGLE_DRIVE_SCOPES = ['https://www.googleapis.com/auth/drive.file']
-
 # You need to get the API Key from: https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey
 # The AK/SK provided are for account access, not direct API calls
 # After logging in with your AK/SK, generate an API Key in the Ark console
 DOUBAO_API_URL = "https://ark.cn-beijing.volces.com/api/v3/images/generations"
 API_KEY = os.getenv("DOUBAO_API_KEY", "")
+SUPABASE_URL = os.getenv('SUPABASE_URL', '').strip().rstrip('/')
+SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', '').strip()
+SUPABASE_STORAGE_BUCKET = os.getenv('SUPABASE_STORAGE_BUCKET', 'gen-stl-zip').strip()
+SUPABASE_UPLOAD_TIMEOUT = float(os.getenv('SUPABASE_UPLOAD_TIMEOUT', '30'))
 
 
 def get_image_generation_count():
@@ -88,80 +85,71 @@ def image_to_base64_png(image):
     return base64.b64encode(buffer.getvalue()).decode('utf-8')
 
 
-def sanitize_filename(value):
-    fallback = 'model'
-    cleaned = str(value or '').strip()
-    cleaned = cleaned.replace('\\', '_').replace('/', '_')
-    cleaned = cleaned.replace(':', '_').replace('*', '_').replace('?', '_')
-    cleaned = cleaned.replace('"', '_').replace('<', '_').replace('>', '_').replace('|', '_')
-    cleaned = '_'.join(part for part in cleaned.split() if part)
-    cleaned = cleaned.replace('__', '_').strip('_')
-    return (cleaned or fallback)[:80]
+def is_supabase_upload_enabled():
+    return bool(SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY and SUPABASE_STORAGE_BUCKET)
 
 
-def get_google_drive_credentials():
-    if GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON:
-        service_account_info = json.loads(GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON)
-        return service_account.Credentials.from_service_account_info(service_account_info, scopes=GOOGLE_DRIVE_SCOPES)
-
-    credential_path = GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE or os.getenv('GOOGLE_APPLICATION_CREDENTIALS', '').strip()
-    if credential_path and os.path.exists(credential_path):
-        return service_account.Credentials.from_service_account_file(credential_path, scopes=GOOGLE_DRIVE_SCOPES)
-
-    return None
+def sanitize_storage_filename(filename):
+    safe_name = re.sub(r'[^A-Za-z0-9._-]+', '_', str(filename or '').strip())
+    safe_name = re.sub(r'_+', '_', safe_name).strip('._')
+    return safe_name or f'file_{uuid.uuid4().hex[:8]}'
 
 
-def upload_file_to_google_drive(file_bytes, filename, mime_type, folder_id=GOOGLE_DRIVE_FOLDER_ID):
-    if not GOOGLE_DRIVE_UPLOAD_ENABLED:
-        return {
-            'enabled': False,
-            'success': False,
-            'message': 'Google Drive upload is disabled.'
-        }
+def supabase_public_url(object_path):
+    encoded_path = '/'.join(quote(segment, safe='') for segment in object_path.split('/'))
+    return f'{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_STORAGE_BUCKET}/{encoded_path}'
 
-    try:
-        credentials = get_google_drive_credentials()
-        if not credentials:
-            return {
-                'enabled': True,
-                'success': False,
-                'message': 'Missing Google Drive credentials. Set GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON or GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE.'
-            }
 
-        drive_service = build('drive', 'v3', credentials=credentials, cache_discovery=False)
-        metadata = {'name': filename}
-        if folder_id:
-            metadata['parents'] = [folder_id]
+def upload_bytes_to_supabase(object_path, payload, content_type='application/octet-stream'):
+    if not is_supabase_upload_enabled():
+        raise RuntimeError('Supabase upload is not configured.')
 
-        media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime_type, resumable=False)
-        created_file = drive_service.files().create(
-            body=metadata,
-            media_body=media,
-            fields='id,name,webViewLink',
-            supportsAllDrives=True
-        ).execute()
+    endpoint = f'{SUPABASE_URL}/storage/v1/object/{SUPABASE_STORAGE_BUCKET}/{object_path}'
+    response = http_session.post(
+        endpoint,
+        headers={
+            'Authorization': f'Bearer {SUPABASE_SERVICE_ROLE_KEY}',
+            'apikey': SUPABASE_SERVICE_ROLE_KEY,
+            'Content-Type': content_type,
+            'x-upsert': 'true'
+        },
+        data=payload,
+        timeout=SUPABASE_UPLOAD_TIMEOUT
+    )
 
-        return {
-            'enabled': True,
-            'success': True,
-            'file_id': created_file.get('id'),
-            'name': created_file.get('name', filename),
-            'web_view_link': created_file.get('webViewLink') or f"https://drive.google.com/file/d/{created_file.get('id')}/view?usp=drivesdk",
-            'folder_id': folder_id,
-            'message': 'Uploaded to Google Drive.'
-        }
-    except (HttpError, ValueError, json.JSONDecodeError, OSError) as exc:
-        return {
-            'enabled': True,
-            'success': False,
-            'message': f'Google Drive upload failed: {str(exc)}'
-        }
-    except Exception as exc:
-        return {
-            'enabled': True,
-            'success': False,
-            'message': f'Google Drive upload failed: {str(exc)}'
-        }
+    if response.status_code not in (200, 201):
+        raise RuntimeError(f'Supabase upload failed ({response.status_code}): {response.text}')
+
+    return {
+        'bucket': SUPABASE_STORAGE_BUCKET,
+        'path': object_path,
+        'public_url': supabase_public_url(object_path)
+    }
+
+
+def upload_generated_files_to_supabase(file_entries, generation_type):
+    if not is_supabase_upload_enabled():
+        return []
+
+    timestamp = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
+    run_id = uuid.uuid4().hex[:8]
+    folder = f'generated/{generation_type}/{timestamp}-{run_id}'
+    uploads = []
+
+    for entry in file_entries:
+        filename = sanitize_storage_filename(entry.get('filename'))
+        payload = entry.get('payload')
+        content_type = entry.get('content_type') or 'application/octet-stream'
+        if payload is None:
+            continue
+        object_path = f'{folder}/{filename}'
+        upload_result = upload_bytes_to_supabase(object_path, payload, content_type)
+        uploads.append({
+            'filename': filename,
+            **upload_result
+        })
+
+    return uploads
 
 
 def extract_main_subject_image(image):
@@ -288,7 +276,6 @@ def fast_generate_stl():
         data = request.get_json(silent=True) or {}
         image_b64 = data['image']
         height_mm = float(data.get('height', 5.0))
-        filename_stem = sanitize_filename(data.get('filename_stem', 'model'))
 
         # Decode base64 image
         image_data = base64.b64decode(image_b64)
@@ -313,15 +300,30 @@ def fast_generate_stl():
         )
         
         # Return STL directly (no ZIP for single file)
+        supabase_uploads = []
+        supabase_error = None
+        try:
+            supabase_uploads = upload_generated_files_to_supabase([
+                {
+                    'filename': 'fast_layer.stl',
+                    'payload': stl_content.encode('utf-8'),
+                    'content_type': 'model/stl'
+                }
+            ], 'fast-generate')
+        except Exception as upload_exc:
+            supabase_error = str(upload_exc)
+
         stl_b64 = base64.b64encode(stl_content.encode('utf-8')).decode('utf-8')
 
-        drive_upload = upload_file_to_google_drive(
-            stl_content.encode('utf-8'),
-            f'{filename_stem}.stl',
-            'model/stl'
-        )
-        
-        return jsonify({'stl_file': stl_b64, 'drive_upload': drive_upload})
+        response_payload = {
+            'stl_file': stl_b64,
+            'supabase_upload_enabled': is_supabase_upload_enabled(),
+            'uploaded_files': supabase_uploads
+        }
+        if supabase_error:
+            response_payload['supabase_upload_error'] = supabase_error
+
+        return jsonify(response_payload)
     
     except Exception as e:
         import traceback
@@ -340,7 +342,6 @@ def generate_stl():
         data = request.get_json(silent=True) or {}
         layers = data['layers']  # list of base64 images, one per layer
         num_layers = int(data['num_layers'])
-        filename_stem = sanitize_filename(data.get('filename_stem', 'model'))
 
         # Enforce maximum 4 layers
         if num_layers > 4:
@@ -460,13 +461,36 @@ def generate_stl():
             if 'facet' not in content or content.count('endfacet') == 0:
                 print(f"Warning: {stl_file['name']} has no valid facets")
 
-        drive_upload = upload_file_to_google_drive(
-            zip_bytes,
-            f'{filename_stem}.zip',
-            'application/zip'
-        )
+        supabase_uploads = []
+        supabase_error = None
+        try:
+            upload_entries = [
+                {
+                    'filename': stl_file['name'],
+                    'payload': stl_file['content'].encode('utf-8'),
+                    'content_type': 'model/stl'
+                }
+                for stl_file in stl_files
+            ]
+            upload_entries.append({
+                'filename': 'layers.zip',
+                'payload': zip_bytes,
+                'content_type': 'application/zip'
+            })
+            supabase_uploads = upload_generated_files_to_supabase(upload_entries, 'multi-layer')
+        except Exception as upload_exc:
+            supabase_error = str(upload_exc)
 
-        return jsonify({'zip_file': zip_b64, 'num_layers': num_layers, 'drive_upload': drive_upload})
+        response_payload = {
+            'zip_file': zip_b64,
+            'num_layers': num_layers,
+            'supabase_upload_enabled': is_supabase_upload_enabled(),
+            'uploaded_files': supabase_uploads
+        }
+        if supabase_error:
+            response_payload['supabase_upload_error'] = supabase_error
+
+        return jsonify(response_payload)
 
     except Exception as e:
         import traceback

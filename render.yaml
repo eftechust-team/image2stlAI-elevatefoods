@@ -15,3 +15,11 @@ services:
         sync: false
       - key: FLASK_SECRET_KEY
         sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: gen-stl-zip
+      - key: SUPABASE_UPLOAD_TIMEOUT
+        value: 30
