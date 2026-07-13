@@ -667,6 +667,7 @@
                 gap: 8px;
                 padding: 8px;
                 border-radius: 18px;
+                background: #f3f6ff;
             }
 
             .mode-switch-thumb {
@@ -677,6 +678,30 @@
                 width: 100%;
                 padding: 13px 16px;
                 border-radius: 12px;
+                border: 1px solid #d7def7;
+                background: #ffffff !important;
+                color: #1f2a44 !important;
+                box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+            }
+
+            .mode-button.is-active {
+                color: #ffffff !important;
+                transform: translateY(-1px);
+                box-shadow: 0 10px 22px rgba(76, 99, 210, 0.22);
+                border-color: transparent;
+            }
+
+            #aiModeBtn.is-active {
+                background: linear-gradient(135deg, #667eea 0%, #4c63d2 100%) !important;
+            }
+
+            #uploadModeBtn.is-active {
+                background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%) !important;
+            }
+
+            #aiModeBtn.is-inactive,
+            #uploadModeBtn.is-inactive {
+                background: #ffffff !important;
             }
 
             .selection-layout,
