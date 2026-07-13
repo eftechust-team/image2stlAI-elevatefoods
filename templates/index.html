@@ -615,6 +615,217 @@
             pointer-events: none;
             display: none;
         }
+
+        @media (max-width: 900px) {
+            body {
+                padding-top: 68px;
+            }
+
+            .top-header {
+                padding: 10px 12px;
+                gap: 12px;
+            }
+
+            .fixed-logo {
+                max-width: 140px;
+            }
+
+            .top-header h1 {
+                font-size: 18px;
+            }
+
+            .container {
+                margin: 0 10px 14px 10px;
+                padding: 22px;
+                border-radius: 14px;
+            }
+
+            .section {
+                margin-bottom: 22px;
+                padding-bottom: 16px;
+            }
+
+            .input-group,
+            .controls,
+            .upload-editor-actions,
+            .upload-slider-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .input-group input,
+            .input-group select,
+            .input-group button,
+            .controls button,
+            .upload-editor-actions button,
+            .upload-slider-row input[type="range"] {
+                width: 100%;
+            }
+
+            .mode-switch {
+                grid-template-columns: 1fr;
+                gap: 8px;
+                padding: 8px;
+                border-radius: 18px;
+            }
+
+            .mode-switch-thumb {
+                display: none;
+            }
+
+            .mode-button {
+                width: 100%;
+                padding: 13px 16px;
+                border-radius: 12px;
+            }
+
+            .selection-layout,
+            .upload-compare-panel {
+                flex-direction: column;
+            }
+
+            .selection-canvas-wrap,
+            .selection-tools,
+            .upload-result-card {
+                min-width: 0;
+                width: 100%;
+            }
+
+            .selection-canvas-wrap {
+                flex-basis: auto;
+            }
+
+            #images {
+                grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+                gap: 12px;
+            }
+
+            #images img {
+                height: 150px;
+            }
+
+            #layerSetup > div,
+            #layerSetup > div > div {
+                flex-direction: column !important;
+                width: 100% !important;
+            }
+
+            #layerSetupPreview {
+                width: 100% !important;
+                height: auto !important;
+                max-height: 320px;
+            }
+
+            #aaControlsPanel {
+                gap: 10px;
+            }
+
+            .upload-editor-overlay {
+                padding: 10px;
+                align-items: stretch;
+            }
+
+            .upload-editor-modal {
+                width: 100%;
+                max-height: 96vh;
+                padding: 12px;
+                border-radius: 18px;
+            }
+
+            .upload-editor-header {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .upload-editor-layout {
+                grid-template-columns: 1fr;
+                gap: 14px;
+            }
+
+            .upload-editor-canvas-wrap {
+                padding: 10px;
+            }
+
+            .upload-editor-group {
+                padding: 12px;
+            }
+
+            .upload-slider-row {
+                gap: 8px;
+                margin-bottom: 14px;
+            }
+
+            .upload-slider-row label,
+            .upload-slider-value {
+                min-width: 0;
+                text-align: left;
+            }
+
+            .upload-editor-actions button {
+                min-width: 0;
+            }
+        }
+
+        @media (max-width: 520px) {
+            body {
+                padding-top: 60px;
+            }
+
+            .top-header {
+                padding: 8px 10px;
+                gap: 8px;
+            }
+
+            .fixed-logo {
+                max-width: 112px;
+            }
+
+            .top-header h1 {
+                display: none;
+            }
+
+            .container {
+                margin: 0 8px 12px 8px;
+                padding: 16px;
+            }
+
+            h1 {
+                font-size: 24px !important;
+                line-height: 1.15;
+            }
+
+            h2 {
+                font-size: 1.12em;
+            }
+
+            #images {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            #images img {
+                height: 130px;
+            }
+
+            .upload-editor-modal {
+                padding: 10px;
+                border-radius: 14px;
+            }
+
+            .upload-editor-header h2 {
+                font-size: 20px;
+            }
+
+            .upload-editor-group h3,
+            .upload-result-card h3 {
+                font-size: 14px;
+            }
+
+            .crop-hint,
+            .upload-slider-row label,
+            .upload-slider-value {
+                font-size: 12px;
+            }
+        }
     </style>
 </head>
 <body>
