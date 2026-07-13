@@ -1945,7 +1945,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         image: selectedImage,
-                        height: 2.0  // Fixed 2mm height
+                        height: 2.0,  // Fixed 2mm height
+                        download_name: `${getModelFilenameStem()}.stl`
                     })
                 });
 
@@ -3143,6 +3144,7 @@
                     body: JSON.stringify({
                         layers: layersArray,
                         num_layers: numLayers,
+                        download_name: `${getModelFilenameStem()}.zip`,
                         heights: heightsArray,
                         positions: positionsArray,
                         dilation: selectionDilationPx,

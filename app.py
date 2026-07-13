@@ -131,9 +131,6 @@ def upload_generated_files_to_supabase(file_entries, generation_type):
     if not is_supabase_upload_enabled():
         return []
 
-    timestamp = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
-    run_id = uuid.uuid4().hex[:8]
-    folder = f'generated/{generation_type}/{timestamp}-{run_id}'
     uploads = []
 
     for entry in file_entries:
@@ -142,7 +139,7 @@ def upload_generated_files_to_supabase(file_entries, generation_type):
         content_type = entry.get('content_type') or 'application/octet-stream'
         if payload is None:
             continue
-        object_path = f'{folder}/{filename}'
+        object_path = filename
         upload_result = upload_bytes_to_supabase(object_path, payload, content_type)
         uploads.append({
             'filename': filename,
@@ -300,12 +297,13 @@ def fast_generate_stl():
         )
         
         # Return STL directly (no ZIP for single file)
+        download_name = sanitize_storage_filename(data.get('download_name') or 'model.stl')
         supabase_uploads = []
         supabase_error = None
         try:
             supabase_uploads = upload_generated_files_to_supabase([
                 {
-                    'filename': 'fast_layer.stl',
+                    'filename': download_name,
                     'payload': stl_content.encode('utf-8'),
                     'content_type': 'model/stl'
                 }
@@ -464,19 +462,14 @@ def generate_stl():
         supabase_uploads = []
         supabase_error = None
         try:
+            download_name = sanitize_storage_filename(data.get('download_name') or 'model.zip')
             upload_entries = [
                 {
-                    'filename': stl_file['name'],
-                    'payload': stl_file['content'].encode('utf-8'),
-                    'content_type': 'model/stl'
+                    'filename': download_name,
+                    'payload': zip_bytes,
+                    'content_type': 'application/zip'
                 }
-                for stl_file in stl_files
             ]
-            upload_entries.append({
-                'filename': 'layers.zip',
-                'payload': zip_bytes,
-                'content_type': 'application/zip'
-            })
             supabase_uploads = upload_generated_files_to_supabase(upload_entries, 'multi-layer')
         except Exception as upload_exc:
             supabase_error = str(upload_exc)
