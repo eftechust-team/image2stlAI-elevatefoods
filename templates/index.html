@@ -2424,7 +2424,6 @@
         // Select Shape
         function selectShape(layerIndex) {
             currentLayerIndex = layerIndex;
-            currentSelection = null; // clear previous selection when switching layers
             setActiveLayerCard(layerIndex);
             const selCanvas = document.getElementById('selectCanvas');
             selCanvas.style.display = 'block';
@@ -2465,7 +2464,34 @@
             img.onload = () => {
                 selCtx.clearRect(0, 0, selCanvas.width, selCanvas.height);
                 selCtx.drawImage(img, 0, 0, selCanvas.width, selCanvas.height);
-                
+
+                const existingSelectionDataUrl = layerSelections[layerIndex] || null;
+                if (!existingSelectionDataUrl) {
+                    currentSelection = null;
+                    finishSelectionToolSetup();
+                    return;
+                }
+
+                const selectionPreview = new Image();
+                selectionPreview.onload = () => {
+                    const selectionCanvas = document.createElement('canvas');
+                    selectionCanvas.width = selCanvas.width;
+                    selectionCanvas.height = selCanvas.height;
+                    const selectionCtx = selectionCanvas.getContext('2d', { willReadFrequently: true });
+                    selectionCtx.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height);
+                    selectionCtx.drawImage(selectionPreview, 0, 0, selectionCanvas.width, selectionCanvas.height);
+                    currentSelection = selectionCtx.getImageData(0, 0, selectionCanvas.width, selectionCanvas.height);
+                    finishSelectionToolSetup();
+                };
+                selectionPreview.onerror = () => {
+                    currentSelection = null;
+                    finishSelectionToolSetup();
+                };
+                selectionPreview.src = existingSelectionDataUrl;
+            };
+            img.src = document.getElementById('editedImageDisplay').src;
+
+            function finishSelectionToolSetup() {
                 const infoBox = document.getElementById('selectInfo');
                 const infoText = document.getElementById('selectInfoText');
                 if (infoBox && infoText) {
@@ -2477,11 +2503,10 @@
                 document.getElementById('reverseSelection').style.display = 'block';
                 document.getElementById('confirmSelection').style.display = 'inline-block';
                 document.getElementById('clearSelection').style.display = 'inline-block';
-                
+
                 lassoPath = [];
                 setupSelectionTool(selCanvas, selCtx);
-            };
-            img.src = document.getElementById('editedImageDisplay').src;
+            }
         }
 
         // Selection Tool Setup
@@ -2768,10 +2793,28 @@
                 for (let i = 0; i < selectionMask.length; i++) {
                     if (selectionMask[i] === 1) {
                         const idx = i * 4;
-                        data[idx] = 60; data[idx+1] = 130; data[idx+2] = 255; data[idx+3] = 70;
+                        data[idx] = 38; data[idx+1] = 99; data[idx+2] = 235; data[idx+3] = 150;
                     }
                 }
                 ctx.putImageData(overlayData, 0, 0);
+            }
+
+            function drawLiveLassoPreview() {
+                if (selectionMode !== 'lasso' || lassoPath.length < 2) return;
+                ctx.save();
+                ctx.fillStyle = editMode === 'add' ? 'rgba(38, 99, 235, 0.18)' : 'rgba(255, 100, 0, 0.18)';
+                ctx.strokeStyle = editMode === 'add' ? '#0064ff' : '#ff6400';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([8, 5]);
+                ctx.beginPath();
+                ctx.moveTo(lassoPath[0][0], lassoPath[0][1]);
+                for (let i = 1; i < lassoPath.length; i++) {
+                    ctx.lineTo(lassoPath[i][0], lassoPath[i][1]);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
             }
             
             updateSelectionButtons();
@@ -2796,16 +2839,7 @@
                 
                 // Show real-time preview with current selection mask (no cumulative dilation)
                 redrawWithSelection();
-                
-                // Draw lasso path
-                ctx.strokeStyle = editMode === 'add' ? '#0064ff' : '#ff6400';
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.moveTo(lassoPath[0][0], lassoPath[0][1]);
-                for (let i = 1; i < lassoPath.length; i++) {
-                    ctx.lineTo(lassoPath[i][0], lassoPath[i][1]);
-                }
-                ctx.stroke();
+                drawLiveLassoPreview();
             };
 
             const handleTouchStart = (e) => {
@@ -2834,14 +2868,7 @@
                 if (selectionMode !== 'lasso' || !isDrawingLasso) return;
                 lassoPath.push([point.x, point.y]);
                 redrawWithSelection();
-                ctx.strokeStyle = editMode === 'add' ? '#0064ff' : '#ff6400';
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.moveTo(lassoPath[0][0], lassoPath[0][1]);
-                for (let i = 1; i < lassoPath.length; i++) {
-                    ctx.lineTo(lassoPath[i][0], lassoPath[i][1]);
-                }
-                ctx.stroke();
+                drawLiveLassoPreview();
             };
 
             const handleTouchEnd = (e) => {
