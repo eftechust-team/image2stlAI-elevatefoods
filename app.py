@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from flask import Flask, render_template, render_template_string, request, jsonify, session
 import requests
+import json
 import os
 from PIL import Image, ImageFilter
 import io
@@ -13,6 +14,10 @@ from skimage import measure, transform, filters
 import mapbox_earcut as earcut
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
+from googleapiclient.errors import HttpError
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY') or os.getenv('SECRET_KEY') or 'AIGenSTL-local-dev-secret'
@@ -39,6 +44,12 @@ http_adapter = HTTPAdapter(
 )
 http_session.mount('https://', http_adapter)
 http_session.mount('http://', http_adapter)
+
+GOOGLE_DRIVE_UPLOAD_ENABLED = os.getenv('GOOGLE_DRIVE_UPLOAD_ENABLED', 'true').strip().lower() not in ('0', 'false', 'no', 'off')
+GOOGLE_DRIVE_FOLDER_ID = os.getenv('GOOGLE_DRIVE_FOLDER_ID', '1SH32y4chGV-7QwxWYfG42HSTELqOQN1Y')
+GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON = os.getenv('GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON', '').strip()
+GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE = os.getenv('GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE', '').strip()
+GOOGLE_DRIVE_SCOPES = ['https://www.googleapis.com/auth/drive.file']
 
 # You need to get the API Key from: https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey
 # The AK/SK provided are for account access, not direct API calls
@@ -75,6 +86,82 @@ def image_to_base64_png(image):
     buffer = io.BytesIO()
     image.save(buffer, format='PNG')
     return base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+
+def sanitize_filename(value):
+    fallback = 'model'
+    cleaned = str(value or '').strip()
+    cleaned = cleaned.replace('\\', '_').replace('/', '_')
+    cleaned = cleaned.replace(':', '_').replace('*', '_').replace('?', '_')
+    cleaned = cleaned.replace('"', '_').replace('<', '_').replace('>', '_').replace('|', '_')
+    cleaned = '_'.join(part for part in cleaned.split() if part)
+    cleaned = cleaned.replace('__', '_').strip('_')
+    return (cleaned or fallback)[:80]
+
+
+def get_google_drive_credentials():
+    if GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON:
+        service_account_info = json.loads(GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON)
+        return service_account.Credentials.from_service_account_info(service_account_info, scopes=GOOGLE_DRIVE_SCOPES)
+
+    credential_path = GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE or os.getenv('GOOGLE_APPLICATION_CREDENTIALS', '').strip()
+    if credential_path and os.path.exists(credential_path):
+        return service_account.Credentials.from_service_account_file(credential_path, scopes=GOOGLE_DRIVE_SCOPES)
+
+    return None
+
+
+def upload_file_to_google_drive(file_bytes, filename, mime_type, folder_id=GOOGLE_DRIVE_FOLDER_ID):
+    if not GOOGLE_DRIVE_UPLOAD_ENABLED:
+        return {
+            'enabled': False,
+            'success': False,
+            'message': 'Google Drive upload is disabled.'
+        }
+
+    try:
+        credentials = get_google_drive_credentials()
+        if not credentials:
+            return {
+                'enabled': True,
+                'success': False,
+                'message': 'Missing Google Drive credentials. Set GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON or GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE.'
+            }
+
+        drive_service = build('drive', 'v3', credentials=credentials, cache_discovery=False)
+        metadata = {'name': filename}
+        if folder_id:
+            metadata['parents'] = [folder_id]
+
+        media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime_type, resumable=False)
+        created_file = drive_service.files().create(
+            body=metadata,
+            media_body=media,
+            fields='id,name,webViewLink',
+            supportsAllDrives=True
+        ).execute()
+
+        return {
+            'enabled': True,
+            'success': True,
+            'file_id': created_file.get('id'),
+            'name': created_file.get('name', filename),
+            'web_view_link': created_file.get('webViewLink') or f"https://drive.google.com/file/d/{created_file.get('id')}/view?usp=drivesdk",
+            'folder_id': folder_id,
+            'message': 'Uploaded to Google Drive.'
+        }
+    except (HttpError, ValueError, json.JSONDecodeError, OSError) as exc:
+        return {
+            'enabled': True,
+            'success': False,
+            'message': f'Google Drive upload failed: {str(exc)}'
+        }
+    except Exception as exc:
+        return {
+            'enabled': True,
+            'success': False,
+            'message': f'Google Drive upload failed: {str(exc)}'
+        }
 
 
 def extract_main_subject_image(image):
@@ -201,6 +288,7 @@ def fast_generate_stl():
         data = request.get_json(silent=True) or {}
         image_b64 = data['image']
         height_mm = float(data.get('height', 5.0))
+        filename_stem = sanitize_filename(data.get('filename_stem', 'model'))
 
         # Decode base64 image
         image_data = base64.b64decode(image_b64)
@@ -226,8 +314,14 @@ def fast_generate_stl():
         
         # Return STL directly (no ZIP for single file)
         stl_b64 = base64.b64encode(stl_content.encode('utf-8')).decode('utf-8')
+
+        drive_upload = upload_file_to_google_drive(
+            stl_content.encode('utf-8'),
+            f'{filename_stem}.stl',
+            'model/stl'
+        )
         
-        return jsonify({'stl_file': stl_b64})
+        return jsonify({'stl_file': stl_b64, 'drive_upload': drive_upload})
     
     except Exception as e:
         import traceback
@@ -246,6 +340,7 @@ def generate_stl():
         data = request.get_json(silent=True) or {}
         layers = data['layers']  # list of base64 images, one per layer
         num_layers = int(data['num_layers'])
+        filename_stem = sanitize_filename(data.get('filename_stem', 'model'))
 
         # Enforce maximum 4 layers
         if num_layers > 4:
@@ -352,7 +447,8 @@ def generate_stl():
                 zip_file.writestr(stl_file['name'], stl_file['content'])
 
         zip_buffer.seek(0)
-        zip_b64 = base64.b64encode(zip_buffer.read()).decode('utf-8')
+        zip_bytes = zip_buffer.read()
+        zip_b64 = base64.b64encode(zip_bytes).decode('utf-8')
 
         # Verify we have valid STL files
         if not stl_files:
@@ -364,7 +460,13 @@ def generate_stl():
             if 'facet' not in content or content.count('endfacet') == 0:
                 print(f"Warning: {stl_file['name']} has no valid facets")
 
-        return jsonify({'zip_file': zip_b64, 'num_layers': num_layers})
+        drive_upload = upload_file_to_google_drive(
+            zip_bytes,
+            f'{filename_stem}.zip',
+            'application/zip'
+        )
+
+        return jsonify({'zip_file': zip_b64, 'num_layers': num_layers, 'drive_upload': drive_upload})
 
     except Exception as e:
         import traceback

@@ -37,6 +37,15 @@ This repo includes `render.yaml` for one-click deploy.
   - `DOUBAO_API_KEY`: your Doubao API key (set in Render Dashboard → Environment)
 	- `FLASK_SECRET_KEY`: stable secret used for per-session image quotas
   - `PYTHON_VERSION`: 3.11 (provided in render.yaml)
+	- `GOOGLE_DRIVE_UPLOAD_ENABLED`: set to `true` to upload generated files automatically
+	- `GOOGLE_DRIVE_FOLDER_ID`: target Google Drive folder ID, defaults to the folder you provided
+	- `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON`: service account JSON string, or
+	- `GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE`: path to a service account JSON file
+
+Important:
+
+- Share the target Google Drive folder with the service account email before deploying.
+- If the service account cannot access the folder, the STL/ZIP download still works, but the Drive upload will fail and the error will be shown in the status message.
 
 Optional tuning:
 
