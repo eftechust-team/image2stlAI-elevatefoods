@@ -3064,17 +3064,6 @@
                 }
                 redrawWithSelection();
             };
-
-            return () => {
-                canvas.onmousedown = null;
-                canvas.onmousemove = null;
-                canvas.onmouseup = null;
-                canvas.onclick = null;
-                canvas.removeEventListener('touchstart', handleTouchStart);
-                canvas.removeEventListener('touchmove', handleTouchMove);
-                canvas.removeEventListener('touchend', handleTouchEnd);
-                canvas.removeEventListener('touchcancel', handleTouchEnd);
-            };
             
             document.getElementById('confirmSelection').onclick = () => {
                 // Skip smoothSelectionMask (blur-based) to avoid filling hollow shapes.
@@ -3121,6 +3110,17 @@
                 }
                 
                 alert(`Layer ${currentLayerIndex + 1} selection saved! You can continue adding or subtracting areas.`);
+            };
+
+            return () => {
+                canvas.onmousedown = null;
+                canvas.onmousemove = null;
+                canvas.onmouseup = null;
+                canvas.onclick = null;
+                canvas.removeEventListener('touchstart', handleTouchStart);
+                canvas.removeEventListener('touchmove', handleTouchMove);
+                canvas.removeEventListener('touchend', handleTouchEnd);
+                canvas.removeEventListener('touchcancel', handleTouchEnd);
             };
         }
 
